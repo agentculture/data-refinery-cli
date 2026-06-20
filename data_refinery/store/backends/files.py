@@ -17,6 +17,7 @@ from data_refinery.store.backend import Backend
 from data_refinery.store.envelope import Envelope, Scope, can_serve
 
 _ENV_DIR = "DR_DATA_DIR"
+_JSONL_GLOB = "*.jsonl"  # one scope file per (name, visibility)
 
 
 class FilesBackend:
@@ -63,14 +64,14 @@ class FilesBackend:
     def all(self) -> list[Envelope]:
         """Enumerate every stored envelope across all scopes (no filtering)."""
         out: list[Envelope] = []
-        for path in sorted(self._base.glob("*.jsonl")):
+        for path in sorted(self._base.glob(_JSONL_GLOB)):
             out.extend(self._load(path))
         return out
 
     def delete(self, id: str) -> bool:
         """Hard-delete every envelope with *id*. Returns True if any were removed."""
         removed = False
-        for path in sorted(self._base.glob("*.jsonl")):
+        for path in sorted(self._base.glob(_JSONL_GLOB)):
             records = self._load(path)
             kept = [r for r in records if r.id != id]
             if len(kept) != len(records):
@@ -82,7 +83,7 @@ class FilesBackend:
 
     def _visible(self, scope: Scope) -> list[Envelope]:
         out: list[Envelope] = []
-        for path in sorted(self._base.glob("*.jsonl")):
+        for path in sorted(self._base.glob(_JSONL_GLOB)):
             for env in self._load(path):
                 if can_serve(scope, env.scope):
                     out.append(env)

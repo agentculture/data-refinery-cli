@@ -34,6 +34,10 @@ def _add_backend_flag(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_json_flag(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+
+
 def _read_stdin_json() -> object:
     if sys.stdin is None or sys.stdin.isatty():
         raise CliError(
@@ -137,7 +141,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "validate",
         help="Validate envelope shape for JSON piped on stdin (object or array).",
     )
-    validate.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(validate)
     validate.set_defaults(func=cmd_validate)
 
     dedup = sub.add_parser(
@@ -145,7 +149,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Collapse same-hash-same-scope duplicates in the store (idempotent).",
     )
     _add_backend_flag(dedup)
-    dedup.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(dedup)
     dedup.set_defaults(func=cmd_dedup)
 
     integrity = sub.add_parser(
@@ -153,7 +157,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Check that every stored hash matches sha256(content).",
     )
     _add_backend_flag(integrity)
-    integrity.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(integrity)
     integrity.set_defaults(func=cmd_integrity)
 
     freshness = sub.add_parser(
@@ -177,5 +181,5 @@ def register(sub: argparse._SubParsersAction) -> None:
         default=None,
         help="ISO-8601 'now' override (default: current UTC time). For determinism.",
     )
-    freshness.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(freshness)
     freshness.set_defaults(func=cmd_freshness)

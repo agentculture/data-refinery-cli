@@ -20,6 +20,24 @@ _VISIBILITIES = ("public", "private")
 # -- validate (envelope shape) ------------------------------------------
 
 
+def _scope_errors(scope: Any) -> list[str]:
+    """Shape-check an optional ``scope`` sub-object; returns a list of errors.
+
+    Split out of :func:`validate_payload` so the nested scope checks don't push
+    that function's cognitive complexity over the limit.
+    """
+    if scope is None:
+        return []
+    if not isinstance(scope, dict):
+        return ["scope: must be an object {name, visibility}"]
+    errors: list[str] = []
+    if not isinstance(scope.get("name", ""), str):
+        errors.append("scope.name: must be a string")
+    if scope.get("visibility", "public") not in _VISIBILITIES:
+        errors.append(f"scope.visibility: must be one of {_VISIBILITIES}")
+    return errors
+
+
 def validate_payload(obj: Any) -> dict[str, Any]:
     """Validate a single raw envelope dict's shape. Returns ``{valid, errors}``."""
     if not isinstance(obj, dict):
@@ -30,15 +48,7 @@ def validate_payload(obj: Any) -> dict[str, Any]:
         errors.append("id: must be a non-empty string")
     if not isinstance(obj.get("content", ""), str):
         errors.append("content: must be a string")
-    scope = obj.get("scope")
-    if scope is not None:
-        if not isinstance(scope, dict):
-            errors.append("scope: must be an object {name, visibility}")
-        else:
-            if not isinstance(scope.get("name", ""), str):
-                errors.append("scope.name: must be a string")
-            if scope.get("visibility", "public") not in _VISIBILITIES:
-                errors.append(f"scope.visibility: must be one of {_VISIBILITIES}")
+    errors.extend(_scope_errors(obj.get("scope")))
     if obj.get("metadata") is not None and not isinstance(obj.get("metadata"), dict):
         errors.append("metadata: must be an object")
     if obj.get("hash") is not None and not isinstance(obj.get("hash"), str):

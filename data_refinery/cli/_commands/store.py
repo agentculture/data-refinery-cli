@@ -102,8 +102,10 @@ def cmd_store_get(args: argparse.Namespace) -> int:
             payload = envelope.to_dict()
             payload["found"] = True
             emit_result(payload, json_mode=True)
-        return 0
-    emit_result(f"not found: {args.id}" if envelope is None else envelope.content, json_mode=False)
+    else:
+        emit_result(
+            f"not found: {args.id}" if envelope is None else envelope.content, json_mode=False
+        )
     return 0
 
 
@@ -113,14 +115,13 @@ def cmd_store_list(args: argparse.Namespace) -> int:
     envelopes = backend.list(_scope_from_args(args))
     if json_mode:
         emit_result([e.to_dict() for e in envelopes], json_mode=True)
-        return 0
-    if not envelopes:
+    elif not envelopes:
         emit_result("(empty)", json_mode=False)
-        return 0
-    lines = [
-        f"- {e.id} ({e.scope.name}/{e.scope.visibility}) hash={e.hash[:12]}" for e in envelopes
-    ]
-    emit_result("\n".join(lines), json_mode=False)
+    else:
+        lines = [
+            f"- {e.id} ({e.scope.name}/{e.scope.visibility}) hash={e.hash[:12]}" for e in envelopes
+        ]
+        emit_result("\n".join(lines), json_mode=False)
     return 0
 
 
@@ -183,9 +184,13 @@ def _add_backend_flag(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_json_flag(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+
+
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("store", help="Put/get/list opaque envelopes in the store.")
-    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(p)
     p.set_defaults(func=_store_overview, json=False)
     # Propagate the structured-error parser_class to nested verbs.
     verb = p.add_subparsers(dest="store_command", parser_class=type(p))
@@ -195,22 +200,22 @@ def register(sub: argparse._SubParsersAction) -> None:
     put.add_argument("--content", help="Envelope content (when not piping JSON).")
     _add_scope_flags(put)
     _add_backend_flag(put)
-    put.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(put)
     put.set_defaults(func=cmd_store_put)
 
     get_p = verb.add_parser("get", help="Fetch an envelope by id (scope-filtered).")
     get_p.add_argument("id", help="Envelope id to fetch.")
     _add_scope_flags(get_p)
     _add_backend_flag(get_p)
-    get_p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(get_p)
     get_p.set_defaults(func=cmd_store_get)
 
     list_p = verb.add_parser("list", help="List envelopes visible to a scope.")
     _add_scope_flags(list_p)
     _add_backend_flag(list_p)
-    list_p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(list_p)
     list_p.set_defaults(func=cmd_store_list)
 
     ov = verb.add_parser("overview", help="Describe the store noun.")
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(ov)
     ov.set_defaults(func=_store_overview)
