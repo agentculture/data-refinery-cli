@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-20
+
+### Added
+
+- Storage substrate docker-compose.yml: mongo:8.0 (host 27018) + neo4j:5-community (7687 bolt, 7474 ui, apoc, no auth) with healthchecks and named volumes; ports/auth match eidetic so its env connects unchanged (issue #1, wave 1)
+- `data-refinery stack up/down/status` verb wrapping docker compose (--json, structured health, `--wait` on up; docker-absent/compose-missing/compose-failure exit 2 with a hint, never a traceback)
+- GitHub Actions workflow publish-stack.yml: publishes the compose as a versioned OCI artifact to GHCR and attaches it to the release on a v* tag
+- docs/stack-image.md (image name + tag scheme) and docs/contract.md (the pinnable consumer contract)
+- Opt-in wave-1 live test (tests/test_live_stack.py) verifying a consumer connects to the substrate on eidetic default endpoints
+
+### Changed
+
+- README, CLAUDE.md, AGENTS.colleague.md and `overview` realigned from the inherited template framing to the storage + data-quality domain (wave 1 shipped)
+
+### Security
+
+- Stack ports bind to `127.0.0.1` only by default (the DBs are unauthenticated: `NEO4J_AUTH=none`, no mongo auth), so they are not reachable from other hosts; `DR_BIND=0.0.0.0` opts into all-interfaces on a trusted network (Qodo PR #4 review)
+
 ## [0.3.3] - 2026-06-20
 
 ### Changed

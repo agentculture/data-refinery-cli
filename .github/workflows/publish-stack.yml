@@ -1,0 +1,95 @@
+name: Publish storage stack to GHCR
+
+# Publishes the storage substrate (docker-compose.yml) on a version tag.
+#
+# Two consumption paths are published for the same version (issue #1):
+#   1. An OCI artifact via `docker compose publish` —
+#      ghcr.io/agentculture/data-refinery-stack:<version> (+ :latest).
+#      The artifact is a SINGLE manifest that REFERENCES the upstream
+#      mongo:8.0 + neo4j:5-community images (which are themselves multi-arch);
+#      it is not a custom multi-arch image. Consume with:
+#        docker compose -f oci://ghcr.io/agentculture/data-refinery-stack:<version> up -d
+#   2. The raw docker-compose.yml attached to the GitHub Release, for consumers
+#      whose docker/compose predates OCI compose support — curl + `-f` it.
+#
+# Tags are immutable per release: a given <version> is published once.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.4.0)"
+        required: true
+
+permissions:
+  contents: write   # create/attach the release asset
+  packages: write   # push the OCI artifact to GHCR
+
+jobs:
+  publish-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Resolve version + image ref
+        id: ref
+        run: |
+          RAW_TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${RAW_TAG#v}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/data-refinery-stack"
+          IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          echo "raw_tag=${RAW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${IMAGE}:${VERSION}"
+
+      - name: Verify compose + OCI publish support
+        run: |
+          docker compose version
+          docker compose -f docker-compose.yml config --quiet
+          # `docker compose publish` landed in Compose v2.24 — fail early with a
+          # clear message on an older runner instead of a cryptic publish error.
+          docker compose publish --help >/dev/null 2>&1 || {
+            echo "::error::this docker compose has no 'publish' subcommand (needs v2.24+)"
+            exit 1
+          }
+          echo "compose validates; publish supported"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish compose as an OCI artifact
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+          VERSION: ${{ steps.ref.outputs.version }}
+        run: |
+          docker compose -f docker-compose.yml publish "${IMAGE}:${VERSION}" -y
+          docker compose -f docker-compose.yml publish "${IMAGE}:latest" -y
+
+      - name: Attach docker-compose.yml to the release (portable fallback)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RAW_TAG: ${{ steps.ref.outputs.raw_tag }}
+        run: |
+          if gh release view "${RAW_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RAW_TAG}" docker-compose.yml --clobber
+          else
+            # --target pins the release (and creates the tag) at this commit, so
+            # a manual workflow_dispatch with a not-yet-existing tag still works.
+            gh release create "${RAW_TAG}" docker-compose.yml \
+              --target "${GITHUB_SHA}" \
+              --title "${RAW_TAG}" \
+              --notes "Storage stack (mongo 27018 + neo4j 7687). OCI: docker compose -f oci://${{ steps.ref.outputs.image }}:${{ steps.ref.outputs.version }} up -d"
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "### Storage stack published"
+            echo ""
+            echo "- OCI: \`docker compose -f oci://${{ steps.ref.outputs.image }}:${{ steps.ref.outputs.version }} up -d\`"
+            echo "- Release asset: \`docker-compose.yml\` on release ${{ steps.ref.outputs.raw_tag }}"
+          } >> "$GITHUB_STEP_SUMMARY"

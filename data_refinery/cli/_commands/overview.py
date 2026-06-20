@@ -18,10 +18,10 @@ from data_refinery.cli._commands.whoami import report
 from data_refinery.cli._output import emit_result
 
 _ARTIFACTS = [
-    "culture.yaml + CLAUDE.md — mesh identity (suffix + backend)",
+    "docker-compose.yml — the storage substrate (mongo 27018 + neo4j 7687/apoc)",
+    "docs/stack-image.md + docs/contract.md — the GHCR image + pinnable contract",
+    "culture.yaml + CLAUDE.md / AGENTS.colleague.md — mesh identity (suffix + backend)",
     ".claude/skills/ — the canonical guildmaster skill kit (cite-don't-import)",
-    "docs/skill-sources.md — skill provenance ledger",
-    "pyproject.toml + .github/workflows/ — buildable, deployable package baseline",
 ]
 
 _VERBS = [
@@ -30,6 +30,7 @@ _VERBS = [
     "explain <path> — markdown docs for a topic",
     "overview — this descriptive snapshot",
     "doctor — check the agent-identity invariants",
+    "stack up|down|status — manage the storage substrate (mongo + neo4j)",
 ]
 
 
@@ -47,7 +48,7 @@ def agent_sections() -> list[dict[str, object]]:
             ],
         },
         {"title": "Verbs", "items": list(_VERBS)},
-        {"title": "Sibling-pattern artifacts", "items": list(_ARTIFACTS)},
+        {"title": "Artifacts", "items": list(_ARTIFACTS)},
     ]
 
 

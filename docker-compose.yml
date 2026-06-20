@@ -1,0 +1,78 @@
+# data-refinery storage substrate — mongo + neo4j.
+#
+# Owned by data-refinery-cli (issue #1): the storage layer split out of
+# eidetic-cli. Ports and auth match eidetic's historical defaults so a
+# consumer (eidetic first) connects with zero config change:
+#   - mongo  on host 27018 (NOT 27017 — deliberate collision-avoidance)
+#   - neo4j  on 7687 (bolt) + 7474 (browser UI), apoc, no auth
+#
+# SECURITY: neo4j runs with NEO4J_AUTH=none and mongo has no auth, so ports bind
+# to LOOPBACK ONLY by default (127.0.0.1) — the unauthenticated DBs are not
+# reachable from other hosts. A same-host consumer (eidetic via
+# mongodb://localhost:27018 / bolt://localhost:7687) is unaffected. To expose on
+# all interfaces (only on a trusted/isolated network), set DR_BIND=0.0.0.0:
+#   DR_BIND=0.0.0.0 data-refinery stack up
+#
+# Bring it up with the agent's own CLI (preferred) or docker compose directly:
+#   data-refinery stack up        # wraps `docker compose up -d`
+#   docker compose up -d
+#
+# This same file is published to GHCR as a versioned OCI artifact
+# (`docker compose publish`, see .github/workflows/publish-stack.yml) so a
+# consumer can `docker compose -f oci://ghcr.io/agentculture/data-refinery-stack:<tag> up`
+# instead of hand-rolling compose. NOTE: the published artifact is a SINGLE OCI
+# manifest that *references* the upstream images; it is not itself a multi-arch
+# image. The upstream mongo/neo4j images are multi-arch, so a consumer on
+# amd64 or arm64 resolves the right platform at pull time — there is no custom
+# image to build here.
+#
+# Project name is `data-refinery-stack` (NOT `data-refinery`) to avoid colliding
+# with the sibling autonomous-intelligence/data-refinery compose project, whose
+# directory name also resolves to `data-refinery`.
+name: data-refinery-stack
+
+services:
+  data-refinery-neo4j:
+    image: neo4j:5-community
+    container_name: data-refinery-neo4j
+    restart: unless-stopped
+    ports:
+      # Loopback-only by default; DR_BIND=0.0.0.0 opts into all-interfaces.
+      - "${DR_BIND:-127.0.0.1}:7687:7687"   # bolt  (NEO4J_URI=bolt://localhost:7687)
+      - "${DR_BIND:-127.0.0.1}:7474:7474"   # browser UI
+    environment:
+      NEO4J_AUTH: none
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - data-refinery-neo4j-data:/data
+      - data-refinery-neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell 'RETURN 1' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  data-refinery-mongo:
+    image: mongo:8.0
+    container_name: data-refinery-mongo
+    restart: unless-stopped
+    ports:
+      # Loopback-only by default; DR_BIND=0.0.0.0 opts into all-interfaces.
+      - "${DR_BIND:-127.0.0.1}:27018:27017"  # host 27018 (mongodb://localhost:27018), NOT 27017
+    environment:
+      MONGO_INITDB_DATABASE: data_refinery
+    volumes:
+      - data-refinery-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Docker-managed named volumes — portable across consumption paths (repo,
+# release asset, OCI artifact) and free of host bind-mount permission friction.
+volumes:
+  data-refinery-neo4j-data:
+  data-refinery-neo4j-logs:
+  data-refinery-mongo-data:
