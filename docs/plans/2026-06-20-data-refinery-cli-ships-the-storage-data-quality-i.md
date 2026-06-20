@@ -26,7 +26,7 @@ slug: `data-refinery-cli-ships-the-storage-data-quality-i` · status: `exported`
 - depends on: t1
 - covers: c10, h3
 - acceptance:
-  - on tag/release a workflow runs docker compose publish to ghcr.io/agentculture/<name>:<tag>; the OCI artifact references upstream multi-arch mongo:8.0 + neo4j:5-community (no fat single-DB image)
+  - on tag/release a workflow runs docker compose publish to `ghcr.io/agentculture/<name>:<tag>`; the OCI artifact references upstream multi-arch mongo:8.0 + neo4j:5-community (no fat single-DB image)
   - docs/stack-image.md documents the image name + immutable-per-release tag scheme a consumer pins
 
 ### t4 — Agent-first contract conformance + tests for the stack verb
