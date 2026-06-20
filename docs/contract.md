@@ -6,7 +6,8 @@ shape, exit-code meaning, or the image tag scheme requires a **version bump** in
 [`pyproject.toml`](../pyproject.toml) (the `version-check` CI job enforces a bump
 on every PR).
 
-- **Contract version:** `1` (Wave 1 — infrastructure surface).
+- **Contract version:** `2` (Wave 2 — adds the store + data-quality surface to
+  the Wave 1 infrastructure surface).
 - **Package version pinned by a consumer:** see `pyproject.toml` `version`.
 
 ## Wave 1 — the storage stack (stable)
@@ -54,29 +55,69 @@ All verbs accept `--json`. Results → stdout, diagnostics → stderr, never mix
   always accompanied by a `hint:` on stderr; **never a Python traceback**.
 - `3+` reserved
 
-## Wave 2 — store + data-quality surface (NOT yet stable)
+## Wave 2 — store + data-quality surface (stable)
 
-Added in Wave 2 (tracked as a follow-up issue). Reserved here so a consumer knows
-what is coming and does not depend on a shape that does not exist yet:
+The store moves **opaque** documents — data-refinery never interprets them as
+memories. All verbs accept `--json`; results → stdout, diagnostics/errors →
+stderr, never mixed. The same implementation is importable as
+`data_refinery.store.*` / `data_refinery.quality.*` (a consumer may shell out OR
+import).
 
-- **Generic storage envelope** (opaque to data-refinery — no memory semantics):
+### Generic storage envelope
 
-  ```json
-  {"id": "...", "hash": "...", "content": "...",
-   "scope": {"name": "...", "visibility": "public|private"},
-   "metadata": {}}
-  ```
+```json
+{"id": "...", "hash": "...", "content": "...",
+ "scope": {"name": "...", "visibility": "public|private"},
+ "metadata": {}}
+```
 
-- **Store verbs:** `store put|get|list` (JSON in/out) and the matching importable
-  library API `data_refinery.store.*`.
-- **Data-quality verbs:** `validate`, `dedup` (idempotent by `id`/`hash`),
-  `integrity`, `freshness` — JSON facts, consumer-agnostic.
-- **Invariants the consumer can rely on:** idempotent dedup (never a duplicate by
-  `id`/`hash`); the public/private scope **no-leak** (a private-scope document is
-  never returned by a public-scope fetch).
+`hash` is `sha256(content)`, filled when omitted. There are **no** memory fields:
+a consumer's `lifecycle` / `signal` / `recall_count` / `created` ride inside
+`metadata` and are never read by data-refinery.
 
-> Wave 2 JSON shapes are **provisional** until that wave ships and this contract's
-> version is incremented. Do not pin them yet.
+### `data-refinery store` verbs
+
+- `store put` — reads a JSON envelope on stdin (or `--id`/`--content` flags),
+  upserts (idempotent by `id`; dedups by `hash` on insert), echoes the stored
+  envelope. `--backend files|mongo|neo4j` (default `files`).
+- `store get <id> --json` → the envelope plus `"found": true`, or
+  `{"id": "...", "found": false}`. Scope-filtered (`--scope`/`--visibility`).
+- `store list --json` → a JSON array of envelopes visible to the scope.
+
+### `data-refinery` data-quality verbs
+
+- `validate` (stdin: object or array) → `{"valid", "count", "results":[{index,id,valid,errors}]}`.
+- `dedup --backend … --json` → `{"duplicates_removed", "removed_ids", "kept", "groups"}`.
+  Idempotent: a second run removes 0.
+- `integrity --backend … --json` → `{"ok", "checked", "mismatches":[{id,stored_hash,actual_hash}]}`.
+- `freshness --field <k> --max-age <s> [--now <iso>] --json` →
+  `{"checked", "field", "max_age", "now", "stale", "results":[{id, <k>, age_seconds, stale}]}`.
+  Age/staleness **facts**, not a ranking signal.
+
+Each data-quality verb exits `0` when the check *ran* (findings ride in the
+payload, e.g. `valid:false` / `ok:false`); `1` for unparseable input; `2` for a
+missing backend driver.
+
+### Backends + the optional `[store]` extra
+
+`files` is dependency-free (default; data dir via `DR_DATA_DIR`). `mongo`
+(`DR_MONGO_URI`, default `mongodb://localhost:27018`) and `neo4j` (`DR_NEO4J_URI`,
+default `bolt://localhost:7687`) need the optional extra:
+
+```bash
+pip install 'data-refinery-cli[store]'
+```
+
+A store/quality verb selecting `--backend mongo|neo4j` without the extra exits
+`2` with an install `hint:` — never a traceback.
+
+### Invariants the consumer can rely on
+
+- **Idempotent dedup** — running it twice over the same store yields identical
+  state and never a duplicate by `id` or `hash` (within a scope).
+- **Public/private scope no-leak** — a private-scope document is **never**
+  returned by a public-scope `get`/`list` (`can_serve` is enforced by every
+  backend, not just the consumer).
 
 ## Versioning policy
 

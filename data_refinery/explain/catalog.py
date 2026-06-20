@@ -18,10 +18,9 @@ deduplicating, and checking the integrity and freshness of data as it is stored
 and fetched. Split out of eidetic-cli so eidetic keeps agent-memory; sibling to
 daria, the Data Refinery Intelligent Agent.
 
-The data-quality verbs are not built yet (see issue #1). Today this exposes the
-agent-first introspection surface below on a self-contained runtime (no
-third-party dependencies). The binary is `data-refinery` (the PyPI dist and mesh
-nick are `data-refinery-cli`).
+The binary is `data-refinery` (the PyPI dist and mesh nick are
+`data-refinery-cli`). The default runtime has no third-party dependencies; the
+mongo/neo4j store backends live behind the optional `[store]` extra.
 
 ## Verbs
 
@@ -32,6 +31,11 @@ nick are `data-refinery-cli`).
 - `data-refinery doctor` — check the agent-identity invariants.
 - `data-refinery cli overview` — describe the CLI surface.
 - `data-refinery stack up|down|status` — manage the storage substrate (mongo + neo4j).
+- `data-refinery store put|get|list` — put/get/list opaque envelopes in the store.
+- `data-refinery validate` — check envelope shape for JSON on stdin.
+- `data-refinery dedup` — collapse same-hash-same-scope duplicates (idempotent).
+- `data-refinery integrity` — check every stored hash matches sha256(content).
+- `data-refinery freshness` — report age/staleness facts from a metadata timestamp.
 
 ## Exit-code policy
 
@@ -153,6 +157,96 @@ connects with zero config change.
 """
 
 
+_STORE = """\
+# data-refinery store
+
+Noun group that puts/gets/lists **storage-neutral envelopes** — the CLI mirror of
+the importable `data_refinery.store` library (one shared implementation). An
+envelope is `{id, hash, content, scope{name,visibility}, metadata}` with **no
+memory semantics**: fields like `lifecycle`/`signal`/`created` ride inside
+`metadata` and are never interpreted. The `hash` is `sha256(content)`, filled
+automatically when omitted.
+
+## Verbs
+
+- `data-refinery store put` — upsert an envelope (JSON object on stdin, or
+  `--id`/`--content`). Idempotent by id; dedups by hash on insert.
+- `data-refinery store get <id>` — fetch an envelope visible to a scope. Returns
+  `{...,"found":true}` or `{"id":…,"found":false}`.
+- `data-refinery store list` — list envelopes visible to a scope.
+
+## Backends & scope
+
+- `--backend files` (default, dependency-free, `DR_DATA_DIR`) | `mongo` | `neo4j`
+  (the last two need the optional `[store]` extra; an absent driver exits `2`
+  with a `hint:`, never a traceback).
+- `--scope`/`--visibility` select the scope. A **private**-scope document is
+  never returned by a **public**-scope fetch (`can_serve`).
+
+## Usage
+
+    echo '{"id":"a","content":"hello"}' | data-refinery store put --json
+    data-refinery store get a --json
+    data-refinery store list --scope vault --visibility private --json
+"""
+
+_VALIDATE = """\
+# data-refinery validate
+
+Checks **envelope shape** for JSON piped on stdin (a single object or an array):
+`id` is a non-empty string, `content` is a string, `scope.visibility` is
+`public`/`private`, `metadata` is an object. A data-quality verb — it reports
+facts and exits `0` when the check ran (findings ride in the payload).
+
+## Usage
+
+    echo '{"id":"a","content":"x"}' | data-refinery validate --json
+    cat envelopes.json | data-refinery validate
+"""
+
+_DEDUP = """\
+# data-refinery dedup
+
+Collapses envelopes that share a content `hash` **within the same scope** to one
+survivor (the first id is kept). **Idempotent**: running it twice over the same
+store yields identical state and never a duplicate. Cross-scope same-content
+documents are left alone (scope isolation).
+
+## Usage
+
+    data-refinery dedup --json
+    data-refinery dedup --backend mongo --json
+"""
+
+_INTEGRITY = """\
+# data-refinery integrity
+
+Recomputes `sha256(content)` for every stored envelope and reports any mismatch
+against the stored `hash`. Returns `{ok, checked, mismatches}`; exits `0` when
+the check ran (`ok:false` signals tampered/corrupt content).
+
+## Usage
+
+    data-refinery integrity --json
+    data-refinery integrity --backend neo4j --json
+"""
+
+_FRESHNESS = """\
+# data-refinery freshness
+
+Reports **age/staleness facts** — not a ranking signal. Reads an ISO-8601
+timestamp from `metadata[--field]` (default `created`), computes age in seconds
+vs now (`--now` overrides for determinism), and marks `stale` when older than
+`--max-age` seconds. data-refinery never owns temporal fields; the consumer names
+where its timestamp lives.
+
+## Usage
+
+    data-refinery freshness --field created --max-age 86400 --json
+    data-refinery freshness --now 2026-06-20T00:00:00+00:00 --json
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("data-refinery",): _ROOT,
@@ -170,4 +264,13 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("stack", "down"): _STACK,
     ("stack", "status"): _STACK,
     ("stack", "overview"): _STACK,
+    ("store",): _STORE,
+    ("store", "put"): _STORE,
+    ("store", "get"): _STORE,
+    ("store", "list"): _STORE,
+    ("store", "overview"): _STORE,
+    ("validate",): _VALIDATE,
+    ("dedup",): _DEDUP,
+    ("integrity",): _INTEGRITY,
+    ("freshness",): _FRESHNESS,
 }

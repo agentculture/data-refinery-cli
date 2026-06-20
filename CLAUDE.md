@@ -10,19 +10,25 @@ and freshness of data as it is stored and fetched. It is being split out of
 **eidetic-cli** so eidetic keeps the agent-memory layer; it is a sibling to
 **daria** (the Data Refinery Intelligent Agent).
 
-**Current state — read this first.** **Wave 1 of issue #1 is built**: the
-storage substrate (`docker-compose.yml` — mongo 27018 + neo4j 7687/apoc) and the
-`data-refinery stack up/down/status` verb that wraps `docker compose`, plus the
-GHCR publish workflow (`.github/workflows/publish-stack.yml`) and the pinnable
-docs (`docs/stack-image.md`, `docs/contract.md`). Runtime `dependencies = []`
-still holds — `stack` shells out to docker via stdlib `subprocess`, no driver
-deps. The **store adapters + data-quality verbs are Wave 2** (still unbuilt;
-tracked as a follow-up issue): the generic envelope, files/cypher/mongo
-adapters behind an optional `[store]` extra, and validate/dedup/integrity/
-freshness. The rest of the code is the inherited *agent-first introspection
-scaffold* (`whoami` / `learn` / `explain` / `overview` / `doctor` + a `cli`
-noun), cited from [teken](https://github.com/agentculture/teken)'s `python-cli`
-reference. The build order lives in **issue #1** (see "Domain roadmap").
+**Current state — read this first.** **Waves 1 and 2 of issue #1 are built.**
+*Wave 1* (issue #1): the storage substrate (`docker-compose.yml` — mongo 27018 +
+neo4j 7687/apoc) and the `data-refinery stack up/down/status` verb wrapping
+`docker compose`, plus the GHCR publish workflow
+(`.github/workflows/publish-stack.yml`) and the pinnable docs
+(`docs/stack-image.md`, `docs/contract.md`). *Wave 2* (issue #3): the
+storage-neutral **store** — the generic envelope (`data_refinery/store/`), the
+importable `data_refinery.store.put/get/list` library mirrored by `data-refinery
+store put/get/list`, and the files/mongo/neo4j adapters behind a `Backend`
+Protocol; plus the **data-quality verbs** (`validate` / `dedup` / `integrity` /
+`freshness` in `data_refinery/quality/`). Runtime `dependencies = []` still holds
+— the `files` backend is stdlib-only (default) and `neo4j`/`pymongo` are
+lazy-imported behind the optional `[store]` extra. The remaining code is the
+inherited *agent-first introspection scaffold* (`whoami` / `learn` / `explain` /
+`overview` / `doctor` + a `cli` noun), cited from
+[teken](https://github.com/agentculture/teken)'s `python-cli` reference. **Wave
+3** (the full pinnable verb-JSON contract + eidetic consuming the surface over
+the subprocess boundary) is still open; the build order lives in **issue #1** /
+**issue #3** (see "Domain roadmap").
 
 ## Names: there are three, and they differ on purpose
 
@@ -235,18 +241,24 @@ repo's call (it owns the surface) but must be documented so eidetic can pin.
 
 ## Remaining gaps / next steps
 
-Wave 1 of issue #1 is built (the stack: compose + `stack` verb + GHCR publish +
-contract docs). README, `AGENTS.colleague.md`, and `overview` were realigned to
-the data-quality domain during that work. What is still open:
+Waves 1 and 2 of the split are built. *Wave 1* = the stack (compose + `stack`
+verb + GHCR publish + contract docs). *Wave 2* (issue #3) = the store +
+data-quality surface: the generic opaque envelope `{id,hash,content,scope,
+metadata}` (`data_refinery/store/envelope.py`), the `Backend` Protocol +
+files/mongo/neo4j adapters (`data_refinery/store/backends/`, the driver-backed
+two behind the optional `[store]` extra, lazy-imported, `dependencies = []` stays
+the default), the importable `data_refinery.store.put/get/list` mirrored by the
+`store` CLI noun, and the `validate`/`dedup`/`integrity`/`freshness` verbs
+(`data_refinery/quality/`). Idempotent dedup + the public/private scope no-leak
+(`can_serve`, enforced by every backend's `get`/`list`) are the load-bearing
+invariants. README, `AGENTS.colleague.md`, `learn`, `overview`, the explain
+catalog, and `docs/contract.md` (now contract version 2) were updated for the
+surface. What is still open:
 
-1. **Wave 2 — the store + data-quality surface** (tracked as a follow-up issue):
-   the generic opaque envelope `{id,hash,content,scope,metadata}`, the
-   files/cypher/mongo store adapters behind an optional `[store]` extra
-   (lazy-imported, `dependencies = []` stays the default), and the
-   validate/dedup/integrity/freshness verbs. Idempotent dedup + the public/private
-   scope no-leak are the load-bearing invariants. This is the substantive work.
-2. **Wave 3 — the full pinnable verb contract + eidetic consumption** over the
-   subprocess boundary (eidetic drops/thins `neo4j`+`pymongo`).
+1. **Wave 3 — the full pinnable verb contract + eidetic consumption** over the
+   subprocess boundary (eidetic drops/thins `neo4j`+`pymongo`). The verb-JSON
+   shapes are documented in `docs/contract.md`; Wave 3 freezes them as the pinned
+   surface eidetic consumes process-to-process.
 
 ## Renaming / scaffold lineage
 

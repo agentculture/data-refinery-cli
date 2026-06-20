@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-20
+
+### Added
+
+- Generic storage-neutral envelope {id,hash,content,scope{name,visibility},metadata} with no memory semantics (data_refinery/store/envelope.py)
+- Importable store library data_refinery.store.put/get/list, mirrored by the data-refinery store put/get/list CLI noun over one shared implementation
+- Backend Protocol with files (dependency-free default), mongo, and neo4j adapters; neo4j/pymongo live behind the optional [store] extra and are lazy-imported (dependencies = [] stays the default)
+- Data-quality verbs validate, dedup (idempotent by id/hash), integrity (hash matches content), and freshness (age/staleness facts) — all --json
+- Public/private scope no-leak (can_serve) enforced by every backend get/list; a private-scope document is never returned by a public-scope fetch
+
+### Changed
+
+- docs/contract.md bumped to contract version 2 documenting the store + data-quality verb JSON shapes and the [store] extra
+- README, CLAUDE.md, AGENTS.colleague.md, learn, overview, and the explain catalog updated for the Wave 2 surface
+
 ## [0.4.0] - 2026-06-20
 
 ### Added
