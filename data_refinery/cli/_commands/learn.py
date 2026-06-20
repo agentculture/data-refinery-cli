@@ -1,4 +1,4 @@
-"""``data-refinery-cli learn`` — the learnability affordance.
+"""``data-refinery learn`` — the learnability affordance.
 
 Prints a structured self-teaching prompt. Must satisfy the agent-first rubric:
 >=200 chars and mention purpose, command map, exit codes, --json, and explain.
@@ -12,23 +12,24 @@ from data_refinery import __version__
 from data_refinery.cli._output import emit_result
 
 _TEXT = """\
-data-refinery-cli — a clonable template for AgentCulture mesh agents.
+data-refinery — agent and CLI for data quality in storage and retrieval.
 
 Purpose
 -------
-Scaffold for a new Culture mesh agent: an agent-first CLI (cited from the teken
-`python-cli` reference), an identity (culture.yaml + CLAUDE.md), the canonical
-guildmaster skill kit under .claude/skills/, and a deploy/CI baseline. Clone it,
-rename the package, and edit culture.yaml to mint a new agent.
+Validate, deduplicate, and check the integrity and freshness of data as it is
+stored and fetched. Split out of eidetic-cli so eidetic keeps agent-memory;
+sibling to daria. The data-quality verbs are not built yet (see issue #1) —
+today this exposes the agent-first introspection surface below on a
+self-contained runtime (no third-party dependencies).
 
 Commands
 --------
-  data-refinery-cli whoami             Identity from culture.yaml.
-  data-refinery-cli learn              This self-teaching prompt.
-  data-refinery-cli explain <path>...  Markdown docs for any noun/verb path.
-  data-refinery-cli overview           Descriptive snapshot of the agent.
-  data-refinery-cli doctor             Check the agent-identity invariants.
-  data-refinery-cli cli overview       Describe the CLI surface itself.
+  data-refinery whoami             Identity from culture.yaml.
+  data-refinery learn              This self-teaching prompt.
+  data-refinery explain <path>...  Markdown docs for any noun/verb path.
+  data-refinery overview           Descriptive snapshot of the agent.
+  data-refinery doctor             Check the agent-identity invariants.
+  data-refinery cli overview       Describe the CLI surface itself.
 
 Machine-readable output
 -----------------------
@@ -44,15 +45,15 @@ Exit-code policy
 
 More detail
 -----------
-  data-refinery-cli explain data-refinery-cli
+  data-refinery explain data-refinery
 """
 
 
 def _as_json_payload() -> dict[str, object]:
     return {
-        "tool": "data-refinery-cli",
+        "tool": "data-refinery",
         "version": __version__,
-        "purpose": "Clonable scaffold for a new AgentCulture mesh agent.",
+        "purpose": "Agent and CLI for data quality in storage and retrieval.",
         "commands": [
             {"path": ["whoami"], "summary": "Identity probe from culture.yaml."},
             {"path": ["learn"], "summary": "Self-teaching prompt."},
@@ -67,7 +68,7 @@ def _as_json_payload() -> dict[str, object]:
             "2": "environment/setup error",
         },
         "json_support": True,
-        "explain_pointer": "data-refinery-cli explain <path>",
+        "explain_pointer": "data-refinery explain <path>",
     }
 
 

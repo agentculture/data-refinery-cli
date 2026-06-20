@@ -16,7 +16,7 @@ def resolve(path: tuple[str, ...]) -> str:
     raise CliError(
         code=EXIT_USER_ERROR,
         message=f"no explain entry for: {display}",
-        remediation="list entries with: data-refinery-cli explain data-refinery-cli",
+        remediation="list entries with: data-refinery explain data-refinery",
     )
 
 
