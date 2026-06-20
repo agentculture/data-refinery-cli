@@ -63,10 +63,13 @@ docker compose -f data-refinery-stack.yml up -d
 own CLI, which wraps the in-repo compose file:
 
 ```bash
-data-refinery stack up        # docker compose up -d
+data-refinery stack up        # docker compose up -d --wait
 data-refinery stack status    # per-service state + health
 data-refinery stack down
 ```
+
+> `stack up` uses `docker compose up --wait` (waits until healthy) — needs Docker
+> Compose ≥ 2.20. On older Compose, run `docker compose up -d` directly.
 
 ## Reproducibility
 

@@ -188,7 +188,8 @@ def cmd_stack_down(args: argparse.Namespace) -> int:
     compose = _require_compose()
     json_mode = bool(getattr(args, "json", False))
     emit_diagnostic("stopping the data-refinery storage stack…")
-    _compose(compose, "down")
+    # --remove-orphans cleans up containers dropped from the compose file.
+    _compose(compose, "down", "--remove-orphans")
     payload = {"command": "down", "compose_file": str(compose), "running": False}
     if json_mode:
         emit_result(payload, json_mode=True)
