@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-06-20
+
+### Changed
+
+- `/init`: rewrote the seed `CLAUDE.md` placeholder into a full Claude Code
+  runtime prompt — the three-name split (`data-refinery` command vs
+  `data-refinery-cli` dist/nick vs `data_refinery` package), the CLI contracts
+  (`CliError`/exit-codes, stdout/stderr split, the explain catalog, the `doctor`
+  invariants), the `colleague` backend + dual prompt files, version-bump-every-PR,
+  the CI gates, the skills kit, and the issue #1 storage/data-quality domain
+  roadmap.
+- Reconciled the CLI command-surface text from `data-refinery-cli` to the actual
+  binary name `data-refinery` (argparse `prog`/description, `learn`, the `explain`
+  catalog bodies + headings, `overview`/`cli` subjects, `doctor` output, and the
+  README quickstart). `data-refinery-cli` is kept as `whoami`'s nick and a
+  back-compat `explain` alias.
+- CLI self-description (`learn`/`explain`/`overview`) no longer calls the agent
+  "a clonable template" — it names the data-quality domain and notes the domain
+  verbs are not built yet.
+
+### Fixed
+
+- Agent-first rubric (`teken cli doctor . --strict`) was red on `explain_self`:
+  it runs `explain data-refinery` (the `[project.scripts]` command) but the
+  catalog only keyed `("data-refinery-cli",)`. Added the `("data-refinery",)` root
+  entry (alias kept) — rubric back to 26/26.
+- `pyproject.toml` license `MIT` → `Apache-2.0` (+ matching classifier) to match
+  the `LICENSE` file and README (org-wide scaffold bug inherited from the
+  template; a correction, not a relicense).
+
 ## [0.3.2] - 2026-06-18
 
 ### Added

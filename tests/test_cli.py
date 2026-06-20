@@ -21,7 +21,7 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
 def test_no_args_prints_help(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main([])
     assert rc == 0
-    assert "usage: data-refinery-cli" in capsys.readouterr().out
+    assert "usage: data-refinery" in capsys.readouterr().out
 
 
 def test_unknown_command_errors(capsys: pytest.CaptureFixture[str]) -> None:
@@ -62,7 +62,7 @@ def test_learn_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert rc == 0
     out = capsys.readouterr().out
     assert len(out) >= 200
-    assert "data-refinery-cli" in out
+    assert "data-refinery" in out
     assert "Exit-code policy" in out
     assert "--json" in out
     assert "explain" in out
@@ -72,7 +72,7 @@ def test_learn_json(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["learn", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["tool"] == "data-refinery-cli"
+    assert payload["tool"] == "data-refinery"
     assert payload["version"] == __version__
     assert payload["json_support"] is True
 
@@ -83,10 +83,18 @@ def test_learn_json(capsys: pytest.CaptureFixture[str]) -> None:
 def test_explain_root(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["explain"])
     assert rc == 0
-    assert "# data-refinery-cli" in capsys.readouterr().out
+    assert "# data-refinery" in capsys.readouterr().out
 
 
 def test_explain_self(capsys: pytest.CaptureFixture[str]) -> None:
+    # `explain <command-name>` must resolve (the rubric's explain_self check).
+    rc = main(["explain", "data-refinery"])
+    assert rc == 0
+    assert capsys.readouterr().out.startswith("#")
+
+
+def test_explain_dist_name_alias(capsys: pytest.CaptureFixture[str]) -> None:
+    # The dist/nick name stays a back-compat alias for the root entry.
     rc = main(["explain", "data-refinery-cli"])
     assert rc == 0
     assert capsys.readouterr().out.startswith("#")
@@ -97,7 +105,7 @@ def test_explain_json(capsys: pytest.CaptureFixture[str]) -> None:
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["path"] == ["whoami"]
-    assert "data-refinery-cli whoami" in payload["markdown"]
+    assert "data-refinery whoami" in payload["markdown"]
 
 
 def test_explain_unknown_path_errors(capsys: pytest.CaptureFixture[str]) -> None:

@@ -70,8 +70,8 @@ def _build_parser() -> argparse.ArgumentParser:
     from data_refinery.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
-        prog="data-refinery-cli",
-        description="data-refinery-cli — a clonable template for AgentCulture mesh agents.",
+        prog="data-refinery",
+        description="data-refinery — agent and CLI for data quality in storage and retrieval.",
     )
     parser.add_argument(
         "--version",

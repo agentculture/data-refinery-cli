@@ -18,8 +18,8 @@ Agent and CLI for data quality in storage and retrieval — validating, deduplic
 ```bash
 uv sync
 uv run pytest -n auto                 # run the test suite
-uv run data-refinery-cli whoami  # identity from culture.yaml
-uv run data-refinery-cli learn   # self-teaching prompt (add --json)
+uv run data-refinery whoami      # identity from culture.yaml
+uv run data-refinery learn       # self-teaching prompt (add --json)
 uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 ```
 

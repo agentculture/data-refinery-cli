@@ -1,4 +1,4 @@
-"""``data-refinery-cli whoami`` — the smallest identity probe.
+"""``data-refinery whoami`` — the smallest identity probe.
 
 Reports the agent's identity as declared in ``culture.yaml``: its nick
 (``suffix``), the backend it runs on, and the served model (if any) — plus the

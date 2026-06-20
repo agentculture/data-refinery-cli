@@ -1,15 +1,15 @@
 [project]
 name = "data-refinery-cli"
-version = "0.3.2"
+version = "0.3.3"
 description = "Agent and CLI for data quality in storage and retrieval — validating, deduplicating, and checking the integrity and freshness of data as it is stored and fetched. Split out of eidetic-cli so eidetic keeps agent-memory; sibling to daria, the Data Refinery Intelligent Agent."
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 authors = [{name = "AgentCulture"}]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Topic :: Software Development",
     "Intended Audience :: Developers",
 ]
