@@ -31,6 +31,8 @@ _VERBS = [
     "overview — this descriptive snapshot",
     "doctor — check the agent-identity invariants",
     "stack up|down|status — manage the storage substrate (mongo + neo4j)",
+    "store put|get|list — put/get/list opaque envelopes in the store",
+    "validate|dedup|integrity|freshness — data-quality checks over the store",
 ]
 
 

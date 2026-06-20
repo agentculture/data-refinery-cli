@@ -23,12 +23,12 @@ The split ships in waves:
 | Wave | Scope | Status |
 |------|-------|--------|
 | **1** | docker stack (mongo 27018 + neo4j 7687), GHCR publish, `stack` CLI verb, pinnable contract | **shipped** |
-| **2** | generic storage envelope, files/cypher/mongo store adapters (optional `[store]` extra), data-quality verbs (validate, dedup, integrity, freshness) | planned |
+| **2** | generic storage envelope + importable store API, files/mongo/neo4j adapters (optional `[store]` extra), data-quality verbs (validate, dedup, integrity, freshness) | **shipped** |
 | **3** | full pinnable verb contract + eidetic consumption over the process boundary | planned |
 
 The runtime package has **no third-party dependencies** by default; the heavy
-store drivers (`neo4j`, `pymongo`) arrive in Wave 2 behind an optional extra,
-lazy-imported.
+store drivers (`neo4j`, `pymongo`) live behind the optional `[store]` extra and
+are lazy-imported, so the `files` backend (the default) stays dependency-free.
 
 ## Quickstart
 
@@ -40,6 +40,23 @@ uv run data-refinery stack status --json
 uv run data-refinery stack down
 uv run data-refinery whoami            # identity from culture.yaml
 uv run teken cli doctor . --strict     # the agent-first rubric gate CI runs
+
+# Store + quality (files backend is dependency-free; no docker needed):
+echo '{"id":"a","content":"hello"}' | uv run data-refinery store put --json
+uv run data-refinery store get a --json
+uv run data-refinery store list --json
+uv run data-refinery integrity --json          # hash matches content?
+uv run data-refinery dedup --json              # collapse same-hash dups (idempotent)
+echo '{"id":"a","content":"x"}' | uv run data-refinery validate --json
+```
+
+The store is also importable — shell out **or** `import data_refinery.store`:
+
+```python
+import data_refinery.store as store
+store.put(store.Envelope(id="a", content="hello"))
+store.get("a")        # -> Envelope | None
+store.list()          # -> list[Envelope]
 ```
 
 ## CLI
@@ -47,12 +64,22 @@ uv run teken cli doctor . --strict     # the agent-first rubric gate CI runs
 | Verb | What it does |
 |------|--------------|
 | `stack up\|down\|status` | Manage the storage substrate (mongo + neo4j) via docker compose. |
+| `store put\|get\|list` | Put/get/list opaque envelopes (`--backend files\|mongo\|neo4j`). |
+| `validate` | Check envelope shape for JSON piped on stdin. |
+| `dedup` | Collapse same-hash-same-scope duplicates in the store (idempotent). |
+| `integrity` | Check every stored hash matches `sha256(content)`. |
+| `freshness` | Report age/staleness facts from a metadata timestamp field. |
 | `whoami` | Report this agent's nick, version, backend, and model from `culture.yaml`. |
 | `learn` | Print a structured self-teaching prompt. |
 | `explain <path>` | Markdown docs for any noun/verb path. |
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
+
+The **envelope** is storage-neutral — `{id, hash, content, scope{name,
+visibility}, metadata}` with no memory semantics — and the store enforces a
+public/private **scope no-leak**: a private-scope document is never returned by a
+public-scope fetch, across every backend.
 
 Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment

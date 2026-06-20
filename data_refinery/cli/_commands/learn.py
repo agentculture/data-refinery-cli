@@ -18,9 +18,9 @@ Purpose
 -------
 Validate, deduplicate, and check the integrity and freshness of data as it is
 stored and fetched. Split out of eidetic-cli so eidetic keeps agent-memory;
-sibling to daria. The data-quality verbs are not built yet (see issue #1) —
-today this exposes the agent-first introspection surface below on a
-self-contained runtime (no third-party dependencies).
+sibling to daria. The store moves OPAQUE envelopes — no memory semantics. The
+default runtime has no third-party dependencies; the mongo/neo4j store backends
+live behind the optional [store] extra (lazy-imported).
 
 Commands
 --------
@@ -30,6 +30,12 @@ Commands
   data-refinery overview           Descriptive snapshot of the agent.
   data-refinery doctor             Check the agent-identity invariants.
   data-refinery cli overview       Describe the CLI surface itself.
+  data-refinery stack up|down|status   Manage the storage substrate.
+  data-refinery store put|get|list     Put/get/list opaque envelopes.
+  data-refinery validate           Check envelope shape (JSON on stdin).
+  data-refinery dedup              Collapse same-hash duplicates (idempotent).
+  data-refinery integrity          Check stored hash matches sha256(content).
+  data-refinery freshness          Report age/staleness facts from metadata.
 
 Machine-readable output
 -----------------------
@@ -61,6 +67,12 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["overview"], "summary": "Descriptive snapshot of the agent."},
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
+            {"path": ["stack"], "summary": "Manage the storage substrate (up/down/status)."},
+            {"path": ["store"], "summary": "Put/get/list opaque envelopes in the store."},
+            {"path": ["validate"], "summary": "Check envelope shape (JSON on stdin)."},
+            {"path": ["dedup"], "summary": "Collapse same-hash duplicates (idempotent)."},
+            {"path": ["integrity"], "summary": "Check stored hash matches sha256(content)."},
+            {"path": ["freshness"], "summary": "Report age/staleness facts from metadata."},
         ],
         "exit_codes": {
             "0": "success",

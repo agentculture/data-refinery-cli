@@ -1,6 +1,6 @@
 [project]
 name = "data-refinery-cli"
-version = "0.4.0"
+version = "0.5.0"
 description = "Agent and CLI for data quality in storage and retrieval — validating, deduplicating, and checking the integrity and freshness of data as it is stored and fetched. Split out of eidetic-cli so eidetic keeps agent-memory; sibling to daria, the Data Refinery Intelligent Agent."
 readme = "README.md"
 license = "Apache-2.0"
@@ -14,6 +14,13 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = []
+
+# Optional store backends. The default `files` backend is dependency-free; the
+# mongo/neo4j adapters lazy-import these inside function bodies, so the empty
+# default `dependencies` invariant holds and a store verb without this extra
+# exits code 2 with an install hint (never a traceback).
+[project.optional-dependencies]
+store = ["neo4j>=5", "pymongo>=4"]
 
 [project.urls]
 Homepage = "https://github.com/agentculture/data-refinery-cli"

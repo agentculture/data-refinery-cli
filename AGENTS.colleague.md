@@ -15,10 +15,14 @@ behavior, update both.
 
 data-refinery-cli owns the **storage + data-quality infrastructure layer** split
 out of eidetic-cli (issue #1): the mongo + neo4j substrate, the docker stack
-(published to GHCR), and a **consumer-agnostic** data-quality surface (validate,
-dedup, integrity, freshness). It treats stored data as **opaque documents** and
-never interprets them as "memories" — that semantics stays in eidetic, the first
-consumer over a subprocess-not-import boundary.
+(published to GHCR), a storage-neutral **store** (`store put/get/list` over a
+files/mongo/neo4j `Backend`, also importable as `data_refinery.store`), and a
+**consumer-agnostic** data-quality surface (`validate`, `dedup`, `integrity`,
+`freshness`). It treats stored data as **opaque envelopes**
+(`{id, hash, content, scope, metadata}`) and never interprets them as "memories"
+— that semantics stays in eidetic, the first consumer over a
+subprocess-not-import boundary. Waves 1 (stack) and 2 (store + quality) are
+built; Wave 3 (the pinned verb contract + eidetic consumption) is open.
 
 ## Names (keep them straight)
 
@@ -35,10 +39,11 @@ consumer over a subprocess-not-import boundary.
   (`0` ok, `1` user error, `2` environment error, `3+` reserved).
 - **`--json` on every command**; results to stdout, errors/diagnostics to
   stderr, never mixed.
-- **Runtime deps stay empty by default.** `dependencies = []`. Heavy store
-  drivers (`neo4j`, `pymongo`, Wave 2) go behind an optional extra and are
-  lazy-imported inside function bodies, exiting `CliError(code=2)` with an
-  install `hint:` when absent.
+- **Runtime deps stay empty by default.** `dependencies = []`. The `files`
+  backend is stdlib-only; the heavy store drivers (`neo4j`, `pymongo`) live
+  behind the optional `[store]` extra and are lazy-imported inside function
+  bodies, exiting `CliError(code=2)` with an install `hint:` when absent (a
+  static test asserts no top-level driver import).
 - **Idempotent dedup** (by `id`/`hash`) and the **public/private scope no-leak**
   (a private-scope document is never returned by a public-scope fetch) are
   load-bearing across the consumer boundary.
