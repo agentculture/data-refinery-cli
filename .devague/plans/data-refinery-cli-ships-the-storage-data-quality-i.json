@@ -1,0 +1,393 @@
+{
+  "slug": "data-refinery-cli-ships-the-storage-data-quality-i",
+  "title": "data-refinery-cli ships the storage + data-quality infra layer split out of eidetic-cli: a docker stack (mongo 27018 + neo4j 7687) published as a multi-arch GHCR image, files/cypher/mongo store adapters, and a consumer-agnostic data-quality CLI surface (validate, dedup, integrity, freshness) that eidetic consumes over a subprocess boundary as its first consumer",
+  "frame_slug": "data-refinery-cli-ships-the-storage-data-quality-i",
+  "schema_version": 1,
+  "status": "exported",
+  "created": "2026-06-20T15:32:21Z",
+  "updated": "2026-06-20T15:34:55Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "data-refinery-cli ships the storage + data-quality infra layer split out of eidetic-cli: a docker stack (mongo 27018 + neo4j 7687) published as a multi-arch GHCR image, files/cypher/mongo store adapters, and a consumer-agnostic data-quality CLI surface (validate, dedup, integrity, freshness) that eidetic consumes over a subprocess boundary as its first consumer"
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "eidetic adopts data-refinery's stack + boundary with no regression to remember/recall, and the split is documented well enough that eidetic pins a known version"
+    },
+    {
+      "id": "c2",
+      "kind": "audience",
+      "text": "eidetic-cli (first consumer, over a subprocess-not-import boundary) and any future agent needing a dependency-light data store + quality checks; plus the data-refinery-cli mesh agent operator"
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "eidetic consumes the layer over a process boundary, and the surface is generic enough that a non-memory consumer could use store+quality without inheriting any memory concepts"
+    },
+    {
+      "id": "c3",
+      "kind": "before_state",
+      "text": "the storage/quality substrate lives in eidetic-cli (neo4j+pymongo deps, its own docker-compose, store/cypher adapters) \u2014 but data-refinery-cli's README already promises to own it and the code was originally cited FROM data-refinery; today data-refinery-cli has dependencies=[] and only the introspection scaffold"
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "verifiable today: data-refinery-cli has dependencies=[] and no compose/store code, while eidetic owns neo4j+pymongo+its own compose"
+    },
+    {
+      "id": "c4",
+      "kind": "after_state",
+      "text": "data-refinery-cli owns the docker stack (GHCR image) + the store adapters + a consumer-agnostic data-quality CLI; eidetic pulls the image and (phase 2) calls the CLI over a process boundary, dropping its own DB drivers"
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "after the split data-refinery-cli's repo contains the compose + GHCR workflow + (later) store/quality surface, and eidetic can point at them with a pinned version"
+    },
+    {
+      "id": "c5",
+      "kind": "why_it_matters",
+      "text": "the storage + data-quality layer is reusable beyond agent-memory; returning it to its origin makes data-refinery-cli the canonical owner instead of a cited-from reference, and unblocks eidetic to be a thin agentic-memory layer"
+    },
+    {
+      "id": "h14",
+      "kind": "honesty",
+      "text": "the storage+quality layer is demonstrably reusable beyond agent-memory (a non-eidetic consumer shape is expressible) and eidetic becomes thinner"
+    },
+    {
+      "id": "c6",
+      "kind": "boundary",
+      "text": "Phased: wave 1 ships the docker stack + a stack-management CLI + the GHCR image; wave 2 ships the generic store adapters + consumer-agnostic data-quality CLI; wave 3 ships the pinnable contract + eidetic consumption. data-refinery stores OPAQUE documents and never interprets them as memories"
+    },
+    {
+      "id": "h15",
+      "kind": "honesty",
+      "text": "each wave is independently landable: wave 1 (stack + GHCR + stack CLI) ships and is usable by eidetic before wave 2 exists"
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "docker-compose.yml brings up mongo:8.0 (host 27018->27017) + neo4j:5-community (7687 bolt, 7474 ui, apoc, NEO4J_AUTH=none) with healthchecks + volumes, matching eidetic's ports/auth so eidetic connects with no config change; container names data-refinery-*"
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "starting the compose yields mongo reachable on localhost:27018 and neo4j on bolt://localhost:7687 with apoc; eidetic's existing default env connects with zero config change"
+    },
+    {
+      "id": "c10",
+      "kind": "requirement",
+      "text": "A multi-arch (amd64+arm64) image published to GHCR on tag/release that brings up the mongo+neo4j substrate, so a consumer docker-pulls instead of hand-rolling compose; image name + tag scheme documented for pinning"
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "a consumer on amd64 OR arm64 docker-pulls a tagged image and brings up the same substrate; the tag scheme is documented and immutable per release"
+    },
+    {
+      "id": "c11",
+      "kind": "requirement",
+      "text": "A stack-management CLI (e.g. data-refinery stack up/down/status) wrapping the compose/image so the agent manages the infra it owns; --json status, no traceback, structured errors"
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "data-refinery stack up/down/status manages the substrate and status --json reports health with no traceback when docker is absent (CliError code 2 + hint)"
+    },
+    {
+      "id": "c12",
+      "kind": "requirement",
+      "text": "Files + cypher(neo4j) + mongo store adapters behind a backend Protocol (upsert/get/list/all + scope-filtered fetch), returned from eidetic, with neo4j+pymongo behind an optional extra [store], lazy-imported in function bodies, CliError(code=2)+install hint when absent; dependencies=[] stays the default and a static test asserts no top-level optional import"
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "with dependencies=[] installed, non-store verbs work; a store verb without the [store] extra exits code 2 with an install hint; a static test asserts neo4j/pymongo are never imported at module top level"
+    },
+    {
+      "id": "c13",
+      "kind": "requirement",
+      "text": "A consumer-agnostic data-quality CLI surface: validate (envelope shape), dedup (by id/hash, idempotent upsert \u2014 never duplicate), integrity (hash matches content / referential checks), freshness (age/staleness facts) \u2014 all JSON in/out, no eidetic memory semantics"
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "dedup is idempotent: running it twice over the same input yields identical store state and never creates a duplicate by id or hash; validate/integrity/freshness return structured JSON facts"
+    },
+    {
+      "id": "c14",
+      "kind": "requirement",
+      "text": "public/private scope no-leak survives the boundary: a private-scope document is never reachable via a public-scope fetch (can_serve preserved at the storage layer); this is enforced by data-refinery, not just eidetic"
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "a test stores a private-scope document and proves a public-scope fetch can never return it, across every backend adapter"
+    },
+    {
+      "id": "c15",
+      "kind": "requirement",
+      "text": "Full agent-first CLI contract on every new verb: --json everywhere, strict stdout(result)/stderr(error) split, hint: on errors, documented exit codes (0/1/2/3+), no Python traceback ever (CliError + dispatcher wrap)"
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "teken cli doctor . --strict passes for every new verb: --json present, no traceback, hint: on errors, documented exit codes"
+    },
+    {
+      "id": "c16",
+      "kind": "requirement",
+      "text": "The package is importable as a library in addition to the subprocess CLI: a stable public Python API (e.g. data_refinery.store, data_refinery.quality) so a consumer can import OR shell out; both surfaces share one implementation"
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "import data_refinery; data_refinery.store.put(...) works as a library AND data-refinery store put behaves identically over one shared implementation; both surfaces are tested"
+    },
+    {
+      "id": "c17",
+      "kind": "requirement",
+      "text": "A versioned, documented contract eidetic can pin: the CLI verbs + JSON shapes AND the image name/tag scheme, with semver discipline; documented in repo (docs/) so eidetic pins a known surface"
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "the documented contract carries a version eidetic can reference, and changing a JSON shape or image tag requires a semver bump"
+    },
+    {
+      "id": "c18",
+      "kind": "success_signal",
+      "text": "eidetic, unchanged, docker-pulls the GHCR image and its existing 27018/7687 defaults connect; then (phase 2) eidetic stores+fetches through data-refinery's CLI/library over a process boundary and can drop neo4j+pymongo from its own runtime deps; idempotent dedup + scope no-leak hold across the boundary"
+    },
+    {
+      "id": "h16",
+      "kind": "honesty",
+      "text": "a live test shows eidetic's default env connecting to the data-refinery stack with zero config change; dedup idempotency + scope no-leak hold across the boundary"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Author docker-compose.yml for the mongo+neo4j substrate",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "docker compose up -d brings mongo on host 27018->27017 and neo4j on 7687(bolt)+7474(ui) with NEO4J_PLUGINS=[apoc] and NEO4J_AUTH=none; both healthchecks report healthy; containers named data-refinery-mongo/data-refinery-neo4j; named volumes persist data",
+        "eidetic's default env (mongodb://localhost:27018, bolt://localhost:7687) connects with zero config change"
+      ],
+      "deps": [],
+      "covers": [
+        "c9",
+        "h2"
+      ]
+    },
+    {
+      "id": "t2",
+      "summary": "Add the stack CLI verb (up/down/status) wrapping compose",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "data-refinery stack up|down|status manage the substrate via docker compose; stack status --json emits structured per-service health on stdout",
+        "when docker is absent the verb exits code 2 with a hint: on stderr and NO Python traceback; explain/catalog + overview entries added for the stack noun"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c11",
+        "h4"
+      ]
+    },
+    {
+      "id": "t3",
+      "summary": "GHCR publish workflow: compose as versioned multi-arch OCI artifact",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "on tag/release a workflow runs docker compose publish to ghcr.io/agentculture/<name>:<tag>; the OCI artifact references upstream multi-arch mongo:8.0 + neo4j:5-community (no fat single-DB image)",
+        "docs/stack-image.md documents the image name + immutable-per-release tag scheme a consumer pins"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c10",
+        "h3"
+      ]
+    },
+    {
+      "id": "t4",
+      "summary": "Agent-first contract conformance + tests for the stack verb",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "teken cli doctor . --strict passes; pytest covers stack up/down/status happy paths + the docker-absent code-2 path; --json present, strict stdout/stderr split, hint: on error, exit codes documented"
+      ],
+      "deps": [
+        "t2"
+      ],
+      "covers": [
+        "c15",
+        "h8"
+      ]
+    },
+    {
+      "id": "t5",
+      "summary": "Versioned contract doc eidetic can pin (wave-1 surface)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "docs/contract.md states a contract version string, the image name/tag scheme, and the rule that changing a JSON shape or image tag requires a semver bump; wave-2 verb JSON shapes are stubbed as 'added in wave 2'"
+      ],
+      "deps": [
+        "t3"
+      ],
+      "covers": [
+        "c17",
+        "h10"
+      ]
+    },
+    {
+      "id": "t6",
+      "summary": "Docs/identity alignment to the split (README/CLAUDE/AGENTS)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "README/CLAUDE/AGENTS.colleague.md describe the split honestly: audience (eidetic + future non-memory consumers), before/after state, why (reusable beyond memory), the phased wave boundaries (wave 1 landable alone), and that data-refinery stores OPAQUE documents (no memory semantics)"
+      ],
+      "deps": [],
+      "covers": [
+        "c1",
+        "h1",
+        "c2",
+        "h11",
+        "c3",
+        "h12",
+        "c4",
+        "h13",
+        "c5",
+        "h14",
+        "c6",
+        "h15"
+      ]
+    },
+    {
+      "id": "t7",
+      "summary": "Wave-1 live test: eidetic connects to the stack unchanged",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "a docker-gated check brings the stack up and shows eidetic's default env connecting + a store/fetch round-trip; the check is skipped (not failed) when docker is unavailable; dedup idempotency + scope no-leak are recorded as wave-2 verification items"
+      ],
+      "deps": [
+        "t1",
+        "t2"
+      ],
+      "covers": [
+        "c18",
+        "h16"
+      ]
+    },
+    {
+      "id": "t8",
+      "summary": "Version bump + changelog for the Wave 1 PR",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "pyproject.toml version bumped via the version-bump skill; CHANGELOG.md gets a Keep-a-Changelog entry; version-check CI passes against origin/main"
+      ],
+      "deps": [
+        "t4",
+        "t5",
+        "t6"
+      ],
+      "covers": []
+    },
+    {
+      "id": "t9",
+      "summary": "[wave2] Generic storage envelope + importable store API",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "data_refinery.store.put/get/list operate on a generic envelope {id,hash,content,scope{name,visibility},metadata} with NO memory fields; data-refinery store put/get mirror the library over one shared implementation; both surfaces tested"
+      ],
+      "deps": [],
+      "covers": [
+        "c16",
+        "h9"
+      ]
+    },
+    {
+      "id": "t10",
+      "summary": "[wave2] Store adapters (files/neo4j/mongo) behind a Protocol + optional [store] extra",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "backend Protocol upsert/get/list/all; neo4j+pymongo only under the [store] optional-dependencies extra, lazy-imported in function bodies; a store verb without the extra exits code 2 with an install hint; a static test asserts neo4j/pymongo are never imported at module top level; dependencies=[] default unchanged"
+      ],
+      "deps": [
+        "t9"
+      ],
+      "covers": [
+        "c12",
+        "h5"
+      ]
+    },
+    {
+      "id": "t11",
+      "summary": "[wave2] Data-quality verbs: validate/dedup/integrity/freshness",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "dedup is idempotent by id/hash (running twice over the same input yields identical store state, never a duplicate); validate (envelope shape), integrity (hash matches content), freshness (age/staleness facts) each return structured JSON; all verbs --json, no traceback"
+      ],
+      "deps": [
+        "t9",
+        "t10"
+      ],
+      "covers": [
+        "c13",
+        "h6"
+      ]
+    },
+    {
+      "id": "t12",
+      "summary": "[wave2] Scope no-leak enforcement across all backends",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "can_serve(query_scope, record_scope) preserved at the storage layer; a test stores a private-scope document and proves a public-scope fetch can never return it, across files/neo4j/mongo adapters"
+      ],
+      "deps": [
+        "t10"
+      ],
+      "covers": [
+        "c14",
+        "h7"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "Wave 2 (envelope + adapters + data-quality verbs, tasks t9-t12) and Wave 3 (full pinnable verb-JSON contract + eidetic consumption over the process boundary) are deliberately NOT built in this effort; tracked as follow-up issues via /communicate",
+      "kind": "follow_up",
+      "task_id": null
+    },
+    {
+      "id": "r2",
+      "text": "GHCR 'docker compose publish' OCI-artifact support: verify the runner's docker/compose version supports publishing a compose file as an OCI artifact, and that consumers can run from oci://; fall back to publishing the compose as a release asset if unsupported",
+      "kind": "unknown_nonblocking",
+      "task_id": null
+    },
+    {
+      "id": "r3",
+      "text": "raw vector storage / ANN indexing ownership + timing \u2014 opaque-blob now vs a real vector index later; revisit once a consumer needs semantic search THROUGH data-refinery",
+      "kind": "follow_up",
+      "task_id": null
+    }
+  ]
+}
