@@ -31,6 +31,7 @@ nick are `data-refinery-cli`).
 - `data-refinery overview` — descriptive snapshot of the agent.
 - `data-refinery doctor` — check the agent-identity invariants.
 - `data-refinery cli overview` — describe the CLI surface.
+- `data-refinery stack up|down|status` — manage the storage substrate (mongo + neo4j).
 
 ## Exit-code policy
 
@@ -121,6 +122,37 @@ itself (distinct from the global `overview`, which describes the agent).
 """
 
 
+_STACK = """\
+# data-refinery stack
+
+Noun group that manages the **storage substrate** data-refinery owns (issue #1):
+`mongo:8.0` on host port **27018** and `neo4j:5-community` on **7687** (bolt) +
+**7474** (browser UI), apoc, no auth. Wraps `docker compose` over this repo's
+`docker-compose.yml` so the agent manages the infra without hand-rolling compose.
+
+The ports/auth match eidetic-cli's historical defaults exactly, so a consumer
+connects with zero config change.
+
+## Verbs
+
+- `data-refinery stack up` — `docker compose up -d` (bring the stack up).
+- `data-refinery stack down` — `docker compose down` (stop the stack).
+- `data-refinery stack status` — per-service state + health (`--json` for structured).
+
+## Behaviour
+
+- `--json` on every verb; results to stdout, diagnostics to stderr.
+- Docker absent, compose file missing, or a compose failure → exit `2`
+  (environment error) with a `hint:` — never a Python traceback.
+
+## Usage
+
+    data-refinery stack up
+    data-refinery stack status --json
+    data-refinery stack down
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("data-refinery",): _ROOT,
@@ -133,4 +165,9 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("doctor",): _DOCTOR,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
+    ("stack",): _STACK,
+    ("stack", "up"): _STACK,
+    ("stack", "down"): _STACK,
+    ("stack", "status"): _STACK,
+    ("stack", "overview"): _STACK,
 }

@@ -30,6 +30,7 @@ _VERBS = [
     "explain <path> — markdown docs for a topic",
     "overview — this descriptive snapshot",
     "doctor — check the agent-identity invariants",
+    "stack up|down|status — manage the storage substrate (mongo + neo4j)",
 ]
 
 

@@ -231,3 +231,6 @@ skills.local.yaml
 
 # devague working state (not committed by default)
 .devague/questions/
+
+# data-refinery stack bind-mount data (docker-compose volumes)
+.data/
