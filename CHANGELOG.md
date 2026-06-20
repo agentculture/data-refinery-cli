@@ -20,6 +20,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - docs/contract.md bumped to contract version 2 documenting the store + data-quality verb JSON shapes and the [store] extra
 - README, CLAUDE.md, AGENTS.colleague.md, learn, overview, and the explain catalog updated for the Wave 2 surface
 
+### Fixed
+
+- mongo/neo4j store put now dedups by content hash within the scope on insert, matching the files backend and the documented "dedups by hash on insert" contract (Qodo PR #5 review)
+- neo4j adapter guards metadata JSON parsing: a corrupt node surfaces as a structured exit-2 error with a remediation instead of an uncaught JSONDecodeError wrapped as a generic "unexpected" (Qodo PR #5 review)
+
+### Security
+
+- Scope visibility is validated at ingestion (store put / from_dict reject any value other than public|private with exit 1) and the can_serve no-leak check fails closed — an unrecognised visibility is treated as private, never served across scopes (Qodo PR #5 review)
+
 ## [0.4.0] - 2026-06-20
 
 ### Added

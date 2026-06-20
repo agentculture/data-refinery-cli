@@ -33,6 +33,10 @@ _UPSERT = (
 _MATCH_ONE = "MATCH (d:Document {id: $id}) RETURN d"
 _MATCH_ALL = "MATCH (d:Document) RETURN d"
 _DELETE = "MATCH (d:Document {id: $id}) DETACH DELETE d RETURN count(d) AS deleted"
+_DEDUP_BY_HASH = (
+    "MATCH (d:Document {hash: $hash, scope_name: $scope_name, "
+    "scope_visibility: $scope_visibility}) DETACH DELETE d"
+)
 
 
 class Neo4jBackend:
@@ -60,6 +64,22 @@ class Neo4jBackend:
     # -- Backend protocol ------------------------------------------------
 
     def upsert(self, envelope: Envelope) -> None:
+        """Idempotent by id; dedups by content hash within the scope on insert.
+
+        Mirrors the files backend: when *id* is new, drop any other node with
+        the same content hash in the same scope before creating this one, so
+        re-putting identical content under a new id never accumulates
+        duplicates. Replacing an existing id is not an insert and skips dedup.
+        """
+        if not self._run(_MATCH_ONE, {"id": envelope.id}):
+            self._run(
+                _DEDUP_BY_HASH,
+                {
+                    "hash": envelope.hash,
+                    "scope_name": envelope.scope.name,
+                    "scope_visibility": envelope.scope.visibility,
+                },
+            )
         self._run(
             _UPSERT,
             {
@@ -149,7 +169,18 @@ class Neo4jBackend:
     def _node_to_envelope(node: Any) -> Envelope:
         metadata = node.get("metadata", "{}")
         if isinstance(metadata, str):
-            metadata = json.loads(metadata or "{}")
+            # Guard the parse: a corrupt metadata property must surface as a
+            # structured code-2 error with a remediation (mirroring the files
+            # backend's corrupt-line handling), not escape as a bare
+            # JSONDecodeError that the CLI would wrap as a generic "unexpected".
+            try:
+                metadata = json.loads(metadata or "{}")
+            except json.JSONDecodeError as exc:
+                raise CliError(
+                    code=EXIT_ENV_ERROR,
+                    message=f"corrupt metadata JSON on Document node {node.get('id')!r}: {exc}",
+                    remediation="repair or remove the node's corrupt metadata property",
+                ) from exc
         scope = Scope(
             name=node.get("scope_name", "default"),
             visibility=node.get("scope_visibility", "public"),

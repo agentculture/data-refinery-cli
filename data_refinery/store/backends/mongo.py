@@ -78,9 +78,25 @@ class MongoBackend:
     # -- Backend protocol ------------------------------------------------
 
     def upsert(self, envelope: Envelope) -> None:
+        """Idempotent by id; dedups by content hash within the scope on insert.
+
+        Mirrors the files backend: when *id* is new, drop any other envelope
+        with the same content hash in the same scope so re-putting identical
+        content under a new id never accumulates duplicates. Replacing an
+        existing id leaves same-hash neighbours untouched (it is not an insert).
+        """
+        coll = self._collection
         doc = envelope.to_dict()
         doc["_id"] = envelope.id
-        self._collection.replace_one({"_id": envelope.id}, doc, upsert=True)
+        if coll.find_one({"_id": envelope.id}) is None:
+            coll.delete_many(
+                {
+                    "hash": envelope.hash,
+                    "scope.name": envelope.scope.name,
+                    "scope.visibility": envelope.scope.visibility,
+                }
+            )
+        coll.replace_one({"_id": envelope.id}, doc, upsert=True)
 
     def get(self, id: str, scope: Scope) -> Envelope | None:
         doc = self._collection.find_one({"_id": id})

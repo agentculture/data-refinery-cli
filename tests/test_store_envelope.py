@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+
+from data_refinery.cli._errors import CliError
 from data_refinery.store.envelope import (
     DEFAULT_SCOPE,
     Envelope,
@@ -58,3 +61,22 @@ def test_can_serve_policy() -> None:
     assert can_serve(priv, priv) is True
     assert can_serve(pub, priv) is False
     assert can_serve(Scope("other", "private"), priv) is False
+
+
+def test_can_serve_fails_closed_on_unknown_visibility() -> None:
+    # A record with an unrecognised visibility must NOT leak to a public query —
+    # only an exact same-scope query may see it (defence-in-depth no-leak).
+    weird = Scope("vault", "sekret")  # type: ignore[arg-type]
+    assert can_serve(Scope("default", "public"), weird) is False
+    assert can_serve(Scope("vault", "public"), weird) is False
+    assert can_serve(weird, weird) is True  # same scope only
+
+
+def test_from_dict_rejects_unknown_visibility() -> None:
+    # The ingestion boundary rejects a typo'd visibility with a code-1 CliError
+    # (the no-leak contract constrains visibility to public|private).
+    with pytest.raises(CliError) as exc:
+        Envelope.from_dict({"id": "a", "scope": {"name": "vault", "visibility": "secret"}})
+    assert exc.value.code == 1
+    assert "visibility" in exc.value.message
+    assert "private" in exc.value.remediation

@@ -138,6 +138,20 @@ def test_store_put_stdin_missing_id_exits_1(
     assert "missing 'id'" in capsys.readouterr().err
 
 
+def test_store_put_stdin_bad_visibility_exits_1(
+    files_env: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The stdin-JSON path must reject an out-of-contract visibility so a typo
+    # can never be persisted and later leak to a public fetch.
+    _set_stdin(monkeypatch, '{"id":"a","content":"x","scope":{"visibility":"secret"}}')
+    rc = main(["store", "put"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:") and "hint:" in err
+    assert "visibility" in err
+    assert "Traceback" not in err
+
+
 # --- human (non-JSON) output paths ------------------------------------
 
 

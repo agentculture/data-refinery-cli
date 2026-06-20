@@ -71,15 +71,22 @@ import).
  "metadata": {}}
 ```
 
-`hash` is `sha256(content)`, filled when omitted. There are **no** memory fields:
-a consumer's `lifecycle` / `signal` / `recall_count` / `created` ride inside
-`metadata` and are never read by data-refinery.
+`hash` is `sha256(content)`, filled when omitted. `scope.visibility` is
+constrained to exactly `public` or `private`: an envelope carrying any other
+value is **rejected at ingestion** (`store put` / the importable API exit code
+`1` with a `hint:`). The privacy check itself **fails closed** — only an
+explicitly `public` record is served across scopes; a `private` record (or any
+unrecognised visibility) is served only to a query in the *same* scope. There
+are **no** memory fields: a consumer's `lifecycle` / `signal` / `recall_count` /
+`created` ride inside `metadata` and are never read by data-refinery.
 
 ### `data-refinery store` verbs
 
 - `store put` — reads a JSON envelope on stdin (or `--id`/`--content` flags),
-  upserts (idempotent by `id`; dedups by `hash` on insert), echoes the stored
-  envelope. `--backend files|mongo|neo4j` (default `files`).
+  upserts (idempotent by `id`; on insert, dedups by `hash` **within the same
+  scope** — identical content under a new id collapses to one survivor;
+  identical across backends), echoes the stored envelope. `--backend
+  files|mongo|neo4j` (default `files`).
 - `store get <id> --json` → the envelope plus `"found": true`, or
   `{"id": "...", "found": false}`. Scope-filtered (`--scope`/`--visibility`).
 - `store list --json` → a JSON array of envelopes visible to the scope.

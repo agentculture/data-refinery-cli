@@ -35,14 +35,27 @@ def test_validate_many_aggregates() -> None:
     assert result["valid"] is False
 
 
-# --- dedup (idempotent, via the mongo fake which keeps same-hash dups) --
+# --- dedup (idempotent maintenance verb) -------------------------------
+
+
+def _seed_doc(backend, id: str, content: str) -> None:
+    """Write a doc straight into the mongo fake, bypassing upsert's insert-dedup.
+
+    `store put` now dedups by hash on insert, so duplicates can only pre-exist
+    from another path (bulk import, migration, pre-this-version data). Seeding
+    the store directly reproduces that state — which is exactly what the `dedup`
+    maintenance verb exists to clean.
+    """
+    doc = Envelope(id=id, content=content).to_dict()
+    doc["_id"] = id
+    backend._collection.docs[id] = doc
 
 
 def test_dedup_collapses_same_hash_then_is_idempotent(mongo_backend) -> None:
     # two distinct ids, identical content (same hash), same scope = duplicates
-    mongo_backend.upsert(Envelope(id="a", content="dup"))
-    mongo_backend.upsert(Envelope(id="b", content="dup"))
-    mongo_backend.upsert(Envelope(id="c", content="unique"))
+    _seed_doc(mongo_backend, "a", "dup")
+    _seed_doc(mongo_backend, "b", "dup")
+    _seed_doc(mongo_backend, "c", "unique")
 
     first = checks.dedup(mongo_backend)
     assert first["duplicates_removed"] == 1

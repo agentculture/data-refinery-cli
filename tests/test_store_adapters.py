@@ -66,6 +66,25 @@ def test_neo4j_delete_missing_is_false(neo4j_backend) -> None:
     assert neo4j_backend.delete("ghost") is False
 
 
+def test_neo4j_corrupt_metadata_raises_cli_error(neo4j_backend) -> None:
+    # A node whose metadata property is not valid JSON must surface as a
+    # structured code-2 error with a remediation, not a bare JSONDecodeError
+    # that the CLI would wrap as a generic "unexpected".
+    neo4j_backend._driver._store["bad"] = {
+        "id": "bad",
+        "content": "x",
+        "hash": "h",
+        "metadata": "{not valid json",
+        "scope_name": "default",
+        "scope_visibility": "public",
+    }
+    with pytest.raises(CliError) as exc:
+        neo4j_backend.all()
+    assert exc.value.code == 2
+    assert "metadata" in exc.value.message
+    assert exc.value.remediation
+
+
 def test_neo4j_query_error_wrapped_as_cli_error() -> None:
     class _Boom:
         def session(self):  # noqa: ANN201

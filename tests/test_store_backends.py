@@ -58,3 +58,29 @@ def test_metadata_round_trips(backend) -> None:
     backend.upsert(Envelope(id="a", content="x", metadata={"created": "2026-01-01", "n": 3}))
     got = backend.get("a", Scope("default", "public"))
     assert got is not None and got.metadata == {"created": "2026-01-01", "n": 3}
+
+
+def test_put_dedups_by_hash_on_insert(backend) -> None:
+    # Contract: `store put` dedups by hash on insert. Re-putting identical
+    # content under a new id in the same scope collapses to a single survivor
+    # (the just-inserted one) — identically on every backend.
+    backend.upsert(_env("a", "dup"))
+    backend.upsert(_env("b", "dup"))
+    assert {e.id for e in backend.all()} == {"b"}
+
+
+def test_hash_dedup_is_scoped(backend) -> None:
+    # Same content in *different* scopes is never collapsed — scope isolation
+    # outranks dedup (mirrors the dedup verb's (scope, hash) key).
+    backend.upsert(_env("a", "dup", Scope("s1", "public")))
+    backend.upsert(_env("b", "dup", Scope("s2", "public")))
+    assert {e.id for e in backend.all()} == {"a", "b"}
+
+
+def test_replace_by_id_does_not_dedup_neighbours(backend) -> None:
+    # Replacing an existing id is not an insert: a same-hash neighbour under a
+    # different id is left untouched (matches the files backend).
+    backend.upsert(_env("a", "v1"))
+    backend.upsert(_env("b", "shared"))
+    backend.upsert(_env("a", "shared"))  # replace a; now a & b share a hash
+    assert {e.id for e in backend.all()} == {"a", "b"}

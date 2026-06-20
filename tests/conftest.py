@@ -23,6 +23,24 @@ from data_refinery.store.backends.neo4j import Neo4jBackend
 # --- fake mongo (dict-backed) -----------------------------------------
 
 
+def _doc_matches(doc: dict, filt: dict) -> bool:
+    """Match *doc* against a mongo-style filter, honouring dotted paths.
+
+    Supports the filters the adapter actually issues — flat keys (``hash``) and
+    dotted keys into the embedded scope (``scope.name``/``scope.visibility``).
+    """
+    for key, want in filt.items():
+        cur: object = doc
+        for part in key.split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                cur = None
+                break
+            cur = cur[part]
+        if cur != want:
+            return False
+    return True
+
+
 class FakeMongoCollection:
     def __init__(self) -> None:
         self.docs: dict[str, dict] = {}
@@ -41,6 +59,12 @@ class FakeMongoCollection:
         existed = filt["_id"] in self.docs
         self.docs.pop(filt["_id"], None)
         return SimpleNamespace(deleted_count=1 if existed else 0)
+
+    def delete_many(self, filt):  # noqa: ANN001
+        to_del = [k for k, d in self.docs.items() if _doc_matches(d, filt)]
+        for k in to_del:
+            del self.docs[k]
+        return SimpleNamespace(deleted_count=len(to_del))
 
 
 class _FakeMongoDB:
@@ -94,6 +118,17 @@ class _FakeNeo4jSession:
         if query == _neo4j_mod._DELETE:
             existed = self._store.pop(params["id"], None) is not None
             return [{"deleted": 1 if existed else 0}]
+        if query == _neo4j_mod._DEDUP_BY_HASH:
+            to_del = [
+                k
+                for k, n in self._store.items()
+                if n["hash"] == params["hash"]
+                and n["scope_name"] == params["scope_name"]
+                and n["scope_visibility"] == params["scope_visibility"]
+            ]
+            for k in to_del:
+                del self._store[k]
+            return []
         return []
 
 
