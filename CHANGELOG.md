@@ -24,7 +24,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - mongo/neo4j store put now dedups by content hash within the scope on insert, matching the files backend and the documented "dedups by hash on insert" contract (Qodo PR #5 review)
 - neo4j adapter guards metadata JSON parsing: a corrupt node surfaces as a structured exit-2 error with a remediation instead of an uncaught JSONDecodeError wrapped as a generic "unexpected" (Qodo PR #5 review)
-- SonarCloud new-code cleanups (PR #5), behaviour-preserving: single-exit store get/list handlers (S3516), repeated literals extracted into _add_json_flag helpers / _JSONL_GLOB constant (S1192), and validate_payload cognitive complexity reduced via a _scope_errors helper (S3776)
+- SonarCloud new-code cleanups (PR #5), behaviour-preserving: single-exit store get/list handlers (S3516), repeated literals extracted into `_add_json_flag` helpers / a `_JSONL_GLOB` constant (S1192), and `validate_payload` cognitive complexity reduced via a `_scope_errors` helper (S3776)
 
 ### Security
 
