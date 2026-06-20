@@ -21,6 +21,8 @@ can pin:
   floats. A version tag is immutable.
 - **Ports/auth (pinnable):** mongo `27018`, neo4j `7687` (bolt) + `7474` (UI),
   `apoc`, no auth — matching eidetic's defaults so its env connects unchanged.
+  Ports bind to **`127.0.0.1` only** by default (the DBs are unauthenticated);
+  set `DR_BIND=0.0.0.0` to expose on all interfaces on a trusted network.
 
 ### `data-refinery stack` verbs (stable)
 

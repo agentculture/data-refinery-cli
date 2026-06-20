@@ -19,6 +19,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - README, CLAUDE.md, AGENTS.colleague.md and `overview` realigned from the inherited template framing to the storage + data-quality domain (wave 1 shipped)
 
+### Security
+
+- Stack ports bind to `127.0.0.1` only by default (the DBs are unauthenticated: `NEO4J_AUTH=none`, no mongo auth), so they are not reachable from other hosts; `DR_BIND=0.0.0.0` opts into all-interfaces on a trusted network (Qodo PR #4 review)
+
 ## [0.3.3] - 2026-06-20
 
 ### Changed

@@ -14,8 +14,15 @@ The substrate is two upstream services, defined in
 | `data-refinery-mongo` | `mongo:8.0` | **27018** → 27017 | `27018`, **not** 27017 — deliberate collision-avoidance |
 | `data-refinery-neo4j` | `neo4j:5-community` | **7687** (bolt), **7474** (UI) | `apoc`, `NEO4J_AUTH=none` |
 
-These ports and auth match eidetic-cli's historical defaults exactly, so a
-consumer connects with **zero config change**.
+These ports and auth match eidetic-cli's historical defaults, so a consumer
+connects with **zero config change**.
+
+> **Security — loopback by default.** neo4j runs with `NEO4J_AUTH=none` and mongo
+> has no auth, so the ports bind to **`127.0.0.1` only** by default — the
+> unauthenticated databases are not reachable from other hosts. A same-host
+> consumer (`mongodb://localhost:27018`, `bolt://localhost:7687`) is unaffected.
+> To expose on all interfaces (only on a trusted/isolated network), set
+> `DR_BIND=0.0.0.0` (e.g. `DR_BIND=0.0.0.0 data-refinery stack up`).
 
 The compose **project name is `data-refinery-stack`** (not `data-refinery`) to
 avoid colliding with the sibling `autonomous-intelligence/data-refinery` compose

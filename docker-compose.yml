@@ -1,10 +1,17 @@
 # data-refinery storage substrate — mongo + neo4j.
 #
 # Owned by data-refinery-cli (issue #1): the storage layer split out of
-# eidetic-cli. Ports and auth match eidetic's historical defaults EXACTLY so a
+# eidetic-cli. Ports and auth match eidetic's historical defaults so a
 # consumer (eidetic first) connects with zero config change:
 #   - mongo  on host 27018 (NOT 27017 — deliberate collision-avoidance)
 #   - neo4j  on 7687 (bolt) + 7474 (browser UI), apoc, no auth
+#
+# SECURITY: neo4j runs with NEO4J_AUTH=none and mongo has no auth, so ports bind
+# to LOOPBACK ONLY by default (127.0.0.1) — the unauthenticated DBs are not
+# reachable from other hosts. A same-host consumer (eidetic via
+# mongodb://localhost:27018 / bolt://localhost:7687) is unaffected. To expose on
+# all interfaces (only on a trusted/isolated network), set DR_BIND=0.0.0.0:
+#   DR_BIND=0.0.0.0 data-refinery stack up
 #
 # Bring it up with the agent's own CLI (preferred) or docker compose directly:
 #   data-refinery stack up        # wraps `docker compose up -d`
@@ -30,8 +37,9 @@ services:
     container_name: data-refinery-neo4j
     restart: unless-stopped
     ports:
-      - "7687:7687"   # bolt protocol  (NEO4J_URI=bolt://localhost:7687)
-      - "7474:7474"   # browser UI
+      # Loopback-only by default; DR_BIND=0.0.0.0 opts into all-interfaces.
+      - "${DR_BIND:-127.0.0.1}:7687:7687"   # bolt  (NEO4J_URI=bolt://localhost:7687)
+      - "${DR_BIND:-127.0.0.1}:7474:7474"   # browser UI
     environment:
       NEO4J_AUTH: none
       NEO4J_PLUGINS: '["apoc"]'
@@ -50,7 +58,8 @@ services:
     container_name: data-refinery-mongo
     restart: unless-stopped
     ports:
-      - "27018:27017"  # host 27018 (mongodb://localhost:27018), NOT 27017
+      # Loopback-only by default; DR_BIND=0.0.0.0 opts into all-interfaces.
+      - "${DR_BIND:-127.0.0.1}:27018:27017"  # host 27018 (mongodb://localhost:27018), NOT 27017
     environment:
       MONGO_INITDB_DATABASE: data_refinery
     volumes:
