@@ -50,7 +50,13 @@ jobs:
         run: |
           docker compose version
           docker compose -f docker-compose.yml config --quiet
-          echo "compose validates"
+          # `docker compose publish` landed in Compose v2.24 — fail early with a
+          # clear message on an older runner instead of a cryptic publish error.
+          docker compose publish --help >/dev/null 2>&1 || {
+            echo "::error::this docker compose has no 'publish' subcommand (needs v2.24+)"
+            exit 1
+          }
+          echo "compose validates; publish supported"
 
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -71,7 +77,10 @@ jobs:
           if gh release view "${RAW_TAG}" >/dev/null 2>&1; then
             gh release upload "${RAW_TAG}" docker-compose.yml --clobber
           else
+            # --target pins the release (and creates the tag) at this commit, so
+            # a manual workflow_dispatch with a not-yet-existing tag still works.
             gh release create "${RAW_TAG}" docker-compose.yml \
+              --target "${GITHUB_SHA}" \
               --title "${RAW_TAG}" \
               --notes "Storage stack (mongo 27018 + neo4j 7687). OCI: docker compose -f oci://${{ steps.ref.outputs.image }}:${{ steps.ref.outputs.version }} up -d"
           fi

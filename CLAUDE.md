@@ -10,16 +10,19 @@ and freshness of data as it is stored and fetched. It is being split out of
 **eidetic-cli** so eidetic keeps the agent-memory layer; it is a sibling to
 **daria** (the Data Refinery Intelligent Agent).
 
-**Current state — read this first.** The data-quality/storage domain is **not
-built yet**. Runtime `dependencies = []`; the code on disk today is the inherited
-*agent-first introspection scaffold* (`whoami` / `learn` / `explain` / `overview`
-/ `doctor` + a `cli` noun), cloned from `culture-agent-template` and cited from
-[teken](https://github.com/agentculture/teken)'s `python-cli` reference. Its
-self-description (`learn`, `explain`, `overview`) now names the data-quality
-domain honestly — "the data-quality verbs are not built yet" — rather than the
-old "clonable template" scaffold framing. The repo's true purpose is the
-data-quality agent above and the build order in **issue #1** (see "Domain
-roadmap").
+**Current state — read this first.** **Wave 1 of issue #1 is built**: the
+storage substrate (`docker-compose.yml` — mongo 27018 + neo4j 7687/apoc) and the
+`data-refinery stack up/down/status` verb that wraps `docker compose`, plus the
+GHCR publish workflow (`.github/workflows/publish-stack.yml`) and the pinnable
+docs (`docs/stack-image.md`, `docs/contract.md`). Runtime `dependencies = []`
+still holds — `stack` shells out to docker via stdlib `subprocess`, no driver
+deps. The **store adapters + data-quality verbs are Wave 2** (still unbuilt;
+tracked as a follow-up issue): the generic envelope, files/cypher/mongo
+adapters behind an optional `[store]` extra, and validate/dedup/integrity/
+freshness. The rest of the code is the inherited *agent-first introspection
+scaffold* (`whoami` / `learn` / `explain` / `overview` / `doctor` + a `cli`
+noun), cited from [teken](https://github.com/agentculture/teken)'s `python-cli`
+reference. The build order lives in **issue #1** (see "Domain roadmap").
 
 ## Names: there are three, and they differ on purpose
 
@@ -95,8 +98,19 @@ documented exit codes. The pieces that enforce this span several files:
 - **Command modules** in `cli/_commands/` each expose `register(sub)` and a
   handler returning `int | None`. To add a verb/noun: write the module, then call
   its `register()` in `_build_parser()`. Nouns with action-verbs must also expose
-  an `overview` (rubric `overview_cli_noun_exists`) — the `cli` noun exists purely
-  to model that pattern (it has no action-verbs yet, only `cli overview`).
+  an `overview` (rubric `overview_cli_noun_exists`) — the `cli` noun models that
+  pattern with no action-verbs; **`stack`** (the Wave-1 noun) models a *real* one:
+  `stack up/down/status` action-verbs plus `stack overview`.
+- **`stack.py`** — manages the storage substrate by wrapping `docker compose`
+  over the repo's `docker-compose.yml`. `find_compose()` walks up from `__file__`
+  (mirroring `whoami.find_culture_yaml`) so it finds *this repo's* compose, not the
+  caller's CWD; in a wheel install it returns `None` → `CliError(code=2)` pointing
+  at the published OCI artifact. Docker absent / compose missing / compose failure
+  all raise `CliError(code=2)` with a `hint:` — never a traceback. Uses only
+  stdlib `subprocess`/`shutil`/`json` (no driver deps). The substrate ports/auth
+  match eidetic's defaults exactly; the compose **project name is
+  `data-refinery-stack`** (not `data-refinery`) to avoid colliding with the
+  sibling `autonomous-intelligence/data-refinery` compose project.
 - **`data_refinery/explain/`** — `catalog.py` holds verbatim markdown keyed by
   **command-path tuples** (`("whoami",)`, `("cli","overview")`); `resolve()`
   raises `CliError` on an unknown path. Every registered noun/verb needs an
@@ -221,19 +235,18 @@ repo's call (it owns the surface) but must be documented so eidetic can pin.
 
 ## Remaining gaps / next steps
 
-The `/init` PR reconciled the three scaffold defects (the `explain_self` rubric
-failure via the `("data-refinery",)` catalog key + command-surface sweep; the
-`pyproject` license `MIT` → `Apache-2.0`; the "clonable template" self-description
-→ the data-quality domain). What is still open:
+Wave 1 of issue #1 is built (the stack: compose + `stack` verb + GHCR publish +
+contract docs). README, `AGENTS.colleague.md`, and `overview` were realigned to
+the data-quality domain during that work. What is still open:
 
-1. **The domain itself is unbuilt** — implement issue #1 (the storage +
-   data-quality layer). This is the substantive work.
-2. **`AGENTS.colleague.md` is a thin generic stub.** Since the agent runs on the
-   `colleague` backend, its resident prompt should be fleshed out to match this
-   file's identity/invariants (the sibling cloudai-cli did this during its init).
-3. **README + `overview` still carry some template framing** ("Make it your own",
-   the "sibling-pattern artifacts" section) — minor doc drift to retire as the
-   domain lands.
+1. **Wave 2 — the store + data-quality surface** (tracked as a follow-up issue):
+   the generic opaque envelope `{id,hash,content,scope,metadata}`, the
+   files/cypher/mongo store adapters behind an optional `[store]` extra
+   (lazy-imported, `dependencies = []` stays the default), and the
+   validate/dedup/integrity/freshness verbs. Idempotent dedup + the public/private
+   scope no-leak are the load-bearing invariants. This is the substantive work.
+2. **Wave 3 — the full pinnable verb contract + eidetic consumption** over the
+   subprocess boundary (eidetic drops/thins `neo4j`+`pymongo`).
 
 ## Renaming / scaffold lineage
 

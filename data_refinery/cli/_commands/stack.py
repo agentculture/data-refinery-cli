@@ -104,9 +104,10 @@ def _compose(compose: Path, *args: str) -> subprocess.CompletedProcess[str]:
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
         first = detail[0] if detail else f"exit code {proc.returncode}"
+        verb = f" {args[0]}" if args else ""
         raise CliError(
             code=EXIT_ENV_ERROR,
-            message=f"docker compose {args[0] if args else ''} failed: {first}".strip(),
+            message=f"docker compose{verb} failed: {first}",
             remediation="check 'docker compose version' and that the docker daemon is running",
         )
     return proc
@@ -150,8 +151,11 @@ def _status_payload(compose: Path) -> dict[str, object]:
     proc = _compose(compose, "ps", "--all", "--format", "json")
     services = _parse_ps(proc.stdout)
     running = [s for s in services if s["state"] == "running"]
+    # A service is OK when it is running and not explicitly unhealthy/starting.
+    # An empty health means "no healthcheck defined" (or not yet evaluated) —
+    # treated as OK, but a reported "unhealthy"/"starting" is not.
     healthy = bool(services) and all(
-        s["state"] == "running" and s["health"] in ("", "healthy") for s in services
+        s["state"] == "running" and s["health"] not in ("unhealthy", "starting") for s in services
     )
     return {
         "compose_file": str(compose),
@@ -166,7 +170,9 @@ def cmd_stack_up(args: argparse.Namespace) -> int:
     compose = _require_compose()
     json_mode = bool(getattr(args, "json", False))
     emit_diagnostic("bringing up the data-refinery storage stack (mongo + neo4j)…")
-    _compose(compose, "up", "-d")
+    # --wait blocks until services are healthy (or the timeout elapses), so the
+    # status we report next is accurate and a consumer can connect immediately.
+    _compose(compose, "up", "-d", "--wait", "--wait-timeout", "120")
     payload = _status_payload(compose)
     payload["command"] = "up"
     if json_mode:

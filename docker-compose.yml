@@ -36,8 +36,8 @@ services:
       NEO4J_AUTH: none
       NEO4J_PLUGINS: '["apoc"]'
     volumes:
-      - ./.data/neo4j/data:/data
-      - ./.data/neo4j/logs:/logs
+      - data-refinery-neo4j-data:/data
+      - data-refinery-neo4j-logs:/logs
     healthcheck:
       test: ["CMD-SHELL", "cypher-shell 'RETURN 1' || exit 1"]
       interval: 15s
@@ -54,9 +54,16 @@ services:
     environment:
       MONGO_INITDB_DATABASE: data_refinery
     volumes:
-      - ./.data/mongo:/data/db
+      - data-refinery-mongo-data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+# Docker-managed named volumes — portable across consumption paths (repo,
+# release asset, OCI artifact) and free of host bind-mount permission friction.
+volumes:
+  data-refinery-neo4j-data:
+  data-refinery-neo4j-logs:
+  data-refinery-mongo-data:
