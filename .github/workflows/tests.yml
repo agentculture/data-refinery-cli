@@ -31,11 +31,23 @@ jobs:
 
       - run: uv run pytest -n auto --cov=data_refinery --cov-report=xml:coverage.xml --cov-report=term -v
 
+      # Stamp each analysis with the package version so SonarCloud's "Previous
+      # version" New Code period has a real boundary to diff against (the version
+      # is bumped every PR; see version-check below + the version-bump skill).
+      - name: Resolve project version
+        id: ver
+        run: |
+          VERSION=$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectVersion=${{ steps.ver.outputs.version }}
 
   lint:
     runs-on: ubuntu-latest

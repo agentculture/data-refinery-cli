@@ -11,6 +11,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `publish-stack.yml` now runs on every push to `main`: a `tag` job derives the version from `pyproject.toml` and creates the `v<version>` git tag (tags now track the PyPI release 1:1), and the stack OCI image is **republished only when `docker-compose.yml` changed** since the previous tag — most releases bump the CLI, not the substrate, so the image no longer churns on every merge. A `workflow_dispatch` with a `tag` input still force-(re)publishes a specific version. (`docs/stack-image.md` + `CLAUDE.md` updated.)
 
+## [0.5.1] - 2026-06-21
+
+### Changed
+
+- CI stamps each SonarCloud analysis with `sonar.projectVersion` read from `pyproject.toml`, so the "Previous version" New Code period has a real per-release boundary to diff against (`.github/workflows/tests.yml`)
+
+### Fixed
+
+- Cleared 4 pre-existing SonarCloud smells in `data_refinery/cli/_commands/stack.py` (wave-1), behaviour-preserving: merged the implicitly concatenated `_DOCKER_HINT` literal (S5799), extracted `_load_ps_rows` to drop `_parse_ps` cognitive complexity (S3776), single-exit `cmd_stack_status` via a `_render_status_text` helper (S3516), and an `_add_json_flag` helper for the repeated `"Emit structured JSON."` literal (S1192)
+
 ## [0.5.0] - 2026-06-20
 
 ### Added
