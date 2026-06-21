@@ -27,13 +27,14 @@ import json
 import shutil
 import subprocess  # nosec B404 - used with a fixed argv, never shell=True
 from pathlib import Path
+from typing import Any
 
 from data_refinery.cli._errors import EXIT_ENV_ERROR, CliError
 from data_refinery.cli._output import emit_diagnostic, emit_result
 
 _COMPOSE_FILENAME = "docker-compose.yml"
 _DOCKER_HINT = (
-    "install Docker and ensure 'docker compose' works " "(https://docs.docker.com/get-docker/)"
+    "install Docker and ensure 'docker compose' works (https://docs.docker.com/get-docker/)"
 )
 _COMPOSE_HINT = (
     "run from the data-refinery-cli repo (it ships docker-compose.yml), or pull "
@@ -113,26 +114,37 @@ def _compose(compose: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return proc
 
 
+def _load_ps_rows(text: str) -> list[Any]:
+    """Decode compose ps output: a top-level JSON array, else one object per line.
+
+    Split out of :func:`_parse_ps` so the two-mode decoding (with its nested
+    error handling) doesn't push that function's cognitive complexity over the
+    limit. *text* is assumed already stripped and non-empty.
+    """
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        pass
+    rows: list[Any] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+
 def _parse_ps(stdout: str) -> list[dict[str, object]]:
     """Parse ``docker compose ps --format json`` (array OR one-object-per-line)."""
     text = stdout.strip()
     if not text:
         return []
-    try:
-        parsed = json.loads(text)
-        rows = parsed if isinstance(parsed, list) else [parsed]
-    except json.JSONDecodeError:
-        rows = []
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
     services: list[dict[str, object]] = []
-    for row in rows:
+    for row in _load_ps_rows(text):
         if not isinstance(row, dict):
             continue
         services.append(
@@ -198,6 +210,18 @@ def cmd_stack_down(args: argparse.Namespace) -> int:
     return 0
 
 
+def _render_status_text(payload: dict[str, object]) -> str:
+    """Render the human-readable ``stack status`` text from a status payload."""
+    services = payload["services"]
+    if not services:
+        return "stack status: no services running (try 'data-refinery stack up')"
+    lines = [f"compose: {payload['compose_file']}", f"healthy: {payload['healthy']}"]
+    for s in services:  # type: ignore[attr-defined]
+        health = f" ({s['health']})" if s["health"] else ""
+        lines.append(f"- {s['name']}: {s['state']}{health}")
+    return "\n".join(lines)
+
+
 def cmd_stack_status(args: argparse.Namespace) -> int:
     _require_docker()
     compose = _require_compose()
@@ -206,18 +230,8 @@ def cmd_stack_status(args: argparse.Namespace) -> int:
     payload["command"] = "status"
     if json_mode:
         emit_result(payload, json_mode=True)
-        return 0
-    services = payload["services"]
-    if not services:
-        emit_result(
-            "stack status: no services running (try 'data-refinery stack up')", json_mode=False
-        )
-        return 0
-    lines = [f"compose: {payload['compose_file']}", f"healthy: {payload['healthy']}"]
-    for s in services:
-        health = f" ({s['health']})" if s["health"] else ""
-        lines.append(f"- {s['name']}: {s['state']}{health}")
-    emit_result("\n".join(lines), json_mode=False)
+    else:
+        emit_result(_render_status_text(payload), json_mode=False)
     return 0
 
 
@@ -254,28 +268,32 @@ def _stack_overview(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_json_flag(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+
+
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "stack",
         help="Manage the storage substrate (mongo + neo4j) via docker compose.",
     )
-    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(p)
     p.set_defaults(func=_stack_overview, json=False)
     # Propagate the structured-error parser_class to nested verbs.
     verb = p.add_subparsers(dest="stack_command", parser_class=type(p))
 
     up = verb.add_parser("up", help="Bring the stack up (docker compose up -d).")
-    up.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(up)
     up.set_defaults(func=cmd_stack_up)
 
     down = verb.add_parser("down", help="Stop the stack (docker compose down).")
-    down.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(down)
     down.set_defaults(func=cmd_stack_down)
 
     status = verb.add_parser("status", help="Report per-service state + health.")
-    status.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(status)
     status.set_defaults(func=cmd_stack_status)
 
     ov = verb.add_parser("overview", help="Describe the stack noun.")
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    _add_json_flag(ov)
     ov.set_defaults(func=_stack_overview)

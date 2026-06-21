@@ -1,6 +1,6 @@
 [project]
 name = "data-refinery-cli"
-version = "0.5.0"
+version = "0.5.1"
 description = "Agent and CLI for data quality in storage and retrieval — validating, deduplicating, and checking the integrity and freshness of data as it is stored and fetched. Split out of eidetic-cli so eidetic keeps agent-memory; sibling to daria, the Data Refinery Intelligent Agent."
 readme = "README.md"
 license = "Apache-2.0"
