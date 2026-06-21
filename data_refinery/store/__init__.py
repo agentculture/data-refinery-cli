@@ -26,6 +26,7 @@ from data_refinery.store.envelope import (
     can_serve,
     content_hash,
 )
+from data_refinery.store.migrate import migrate
 
 __all__ = [
     "Envelope",
@@ -39,6 +40,7 @@ __all__ = [
     "put",
     "get",
     "list",
+    "migrate",
 ]
 
 

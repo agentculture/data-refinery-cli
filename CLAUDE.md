@@ -27,10 +27,21 @@ Protocol; plus the **data-quality verbs** (`validate` / `dedup` / `integrity` /
 lazy-imported behind the optional `[store]` extra. The remaining code is the
 inherited *agent-first introspection scaffold* (`whoami` / `learn` / `explain` /
 `overview` / `doctor` + a `cli` noun), cited from
-[teken](https://github.com/agentculture/teken)'s `python-cli` reference. **Wave
-3** (the full pinnable verb-JSON contract + eidetic consuming the surface over
-the subprocess boundary) is still open; the build order lives in **issue #1** /
-**issue #3** (see "Domain roadmap").
+[teken](https://github.com/agentculture/teken)'s `python-cli` reference. *Wave 3,
+first slice* (issue #8): the **store-migration endpoint** — the importable
+`data_refinery.store.migrate(transform, *, backend, base_dir, dry_run)`
+(`data_refinery/store/migrate.py`) mirrored by `data-refinery store migrate`, so a
+consumer (eidetic-cli) upgrades a populated store to the current Envelope format
+by supplying only a *transform* and **never constructing a filesystem write
+path** — moving the path-construction (and eidetic's `S2083`) sink to the
+storage owner. The rewrite is atomic per file (temp sibling + `os.replace`, a
+shared `_atomic_write` that also hardened the day-to-day `upsert`) and idempotent
+(byte-identical 2nd run). **Files granularity only** today; `mongo` (vectors) /
+`neo4j` (graph) raise a structured `CliError` (the files-first seam). The CLI
+verb self-canonicalises data-refinery's own format (no callable crosses argv).
+The rest of **Wave 3** (freezing the full pinnable verb-JSON contract + eidetic
+consuming the surface over the subprocess boundary) is still open; the build
+order lives in **issue #1** / **issue #3** / **issue #8** (see "Domain roadmap").
 
 ## Names: there are three, and they differ on purpose
 
@@ -254,11 +265,20 @@ the default), the importable `data_refinery.store.put/get/list` mirrored by the
 (`data_refinery/quality/`). Idempotent dedup + the public/private scope no-leak
 (`can_serve`, enforced by every backend's `get`/`list`) are the load-bearing
 invariants. README, `AGENTS.colleague.md`, `learn`, `overview`, the explain
-catalog, and `docs/contract.md` (now contract version 2) were updated for the
-surface. What is still open:
+catalog, and `docs/contract.md` (now contract version 3) were updated for the
+surface. *Wave 3, first slice* (issue #8) = the **store-migration endpoint**:
+`data_refinery.store.migrate(transform, *, backend, base_dir, dry_run)` +
+`data-refinery store migrate`, so a consumer upgrades a populated store to the
+current Envelope format supplying only a transform (never a write path), behind
+data-refinery's boundary — which lets eidetic delete its path-constructing
+`migrate_store.py` and clears its `S2083` BLOCKER. Atomic per file
+(`_atomic_write`, also applied to `upsert`) + idempotent (byte-identical 2nd run)
+are the new load-bearing invariants; files granularity only (mongo/neo4j raise).
+What is still open:
 
 1. **Wave 3 — the full pinnable verb contract + eidetic consumption** over the
-   subprocess boundary (eidetic drops/thins `neo4j`+`pymongo`). The verb-JSON
+   subprocess boundary (eidetic drops/thins `neo4j`+`pymongo`, and replaces
+   `eidetic migrate store` with a thin call into `store.migrate`). The verb-JSON
    shapes are documented in `docs/contract.md`; Wave 3 freezes them as the pinned
    surface eidetic consumes process-to-process.
 

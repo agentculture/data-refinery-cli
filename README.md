@@ -45,6 +45,7 @@ uv run teken cli doctor . --strict     # the agent-first rubric gate CI runs
 echo '{"id":"a","content":"hello"}' | uv run data-refinery store put --json
 uv run data-refinery store get a --json
 uv run data-refinery store list --json
+uv run data-refinery store migrate --json      # re-canonicalise own JSONL (idempotent)
 uv run data-refinery integrity --json          # hash matches content?
 uv run data-refinery dedup --json              # collapse same-hash dups (idempotent)
 echo '{"id":"a","content":"x"}' | uv run data-refinery validate --json
@@ -57,6 +58,10 @@ import data_refinery.store as store
 store.put(store.Envelope(id="a", content="hello"))
 store.get("a")        # -> Envelope | None
 store.list()          # -> list[Envelope]
+
+# Upgrade a populated legacy store to the current Envelope format — the consumer
+# supplies only a transform, never a filesystem write path (data-refinery owns it):
+store.migrate(record_to_envelope, base_dir="/path/to/store")
 ```
 
 ## CLI
@@ -65,6 +70,7 @@ store.list()          # -> list[Envelope]
 |------|--------------|
 | `stack up\|down\|status` | Manage the storage substrate (mongo + neo4j) via docker compose. |
 | `store put\|get\|list` | Put/get/list opaque envelopes (`--backend files\|mongo\|neo4j`). |
+| `store migrate` | Re-canonicalise the store's own Envelope-JSONL (atomic, idempotent); consumers import `store.migrate(transform)` to upgrade a legacy store. |
 | `validate` | Check envelope shape for JSON piped on stdin. |
 | `dedup` | Collapse same-hash-same-scope duplicates in the store (idempotent). |
 | `integrity` | Check every stored hash matches `sha256(content)`. |

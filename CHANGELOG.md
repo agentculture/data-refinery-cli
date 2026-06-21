@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-21
+
+### Added
+
+- store migration endpoint (issue #8): importable data_refinery.store.migrate(transform, *, backend, base_dir, dry_run) mirrored by the data-refinery store migrate CLI verb — a consumer upgrades a populated on-disk store to the current Envelope format by supplying only a transform, never constructing a filesystem write path (the rewrite, and its path-construction concern, lives behind data-refinery's boundary).
+- store migrate is atomic per file (temp sibling + os.replace) and idempotent (a second run rewrites nothing, byte-identical); files granularity only today (mongo/neo4j raise a structured CliError as the files-first seam).
+
+### Changed
+
+- FilesBackend writes are now atomic via a shared _atomic_write helper (temp sibling + os.replace), hardening the day-to-day upsert/delete path against truncate-on-crash, not just migration.
+- store migrate validation is now whole-store: every scope file is transformed and validated before any write, so a corrupt line / invalid transform output / symlink escape in any file aborts the whole migration before it touches disk (was per-file). Orphan temp-file reaping moved to the start of the run. (Folded from a colleague review pass.)
+- store I/O faults now obey the exit-code contract: an unreadable/unwritable scope file (permissions, full disk, a failed os.replace) surfaces as a structured CliError with exit code 2 and an actionable remediation, and a valid-JSON-but-non-object line or a record missing its id surfaces as a code-2 "corrupt line" — instead of a raw OSError/AttributeError/KeyError wrapped by the dispatcher as a generic code-1 "unexpected" error. Applied to both the migration and the day-to-day load path via a shared _atomic_write / _corrupt_line. (Folded from a Qodo review pass on PR #9.)
+- docs/contract.md is now contract version 3 (adds the store-migration endpoint).
+
 ## [0.5.2] - 2026-06-21
 
 ### Changed

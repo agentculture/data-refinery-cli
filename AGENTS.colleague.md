@@ -22,7 +22,14 @@ files/mongo/neo4j `Backend`, also importable as `data_refinery.store`), and a
 (`{id, hash, content, scope, metadata}`) and never interprets them as "memories"
 — that semantics stays in eidetic, the first consumer over a
 subprocess-not-import boundary. Waves 1 (stack) and 2 (store + quality) are
-built; Wave 3 (the pinned verb contract + eidetic consumption) is open.
+built; Wave 3's first slice (issue #8) — the **store-migration endpoint**
+`data_refinery.store.migrate(transform, …)` + `data-refinery store migrate` — is
+built: a consumer upgrades a populated store to the current Envelope format by
+supplying only a *transform* (never a filesystem write path), so the rewrite —
+and its path-construction concern — lives behind data-refinery's boundary. It is
+**atomic per file** (temp sibling + `os.replace`) and **idempotent**
+(byte-identical 2nd run); **files granularity only** today (mongo/neo4j raise).
+The rest of Wave 3 (the pinned verb contract + eidetic consumption) is open.
 
 ## Names (keep them straight)
 
