@@ -14,7 +14,9 @@ and freshness of data as it is stored and fetched. It is being split out of
 *Wave 1* (issue #1): the storage substrate (`docker-compose.yml` — mongo 27018 +
 neo4j 7687/apoc) and the `data-refinery stack up/down/status` verb wrapping
 `docker compose`, plus the GHCR publish workflow
-(`.github/workflows/publish-stack.yml`) and the pinnable docs
+(`.github/workflows/publish-stack.yml` — on every push to `main` it auto-tags
+`v<version>` from `pyproject.toml`, then republishes the stack OCI image **only
+when `docker-compose.yml` changed** since the previous tag) and the pinnable docs
 (`docs/stack-image.md`, `docs/contract.md`). *Wave 2* (issue #3): the
 storage-neutral **store** — the generic envelope (`data_refinery/store/`), the
 importable `data_refinery.store.put/get/list` library mirrored by `data-refinery

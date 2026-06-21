@@ -33,8 +33,13 @@ project.
 - **Name:** `ghcr.io/agentculture/data-refinery-stack`
 - **Tags:** the release version without the leading `v` (e.g. `0.4.0`), plus
   `latest`.
-- **Immutability:** a given version tag is published exactly once, on the
-  `v<version>` git tag. Treat `0.4.0` as immutable; `latest` floats.
+- **Immutability:** a given version tag is published exactly once. Treat
+  `0.4.0` as immutable; `latest` floats.
+- **Cadence:** the image is **only (re)published when `docker-compose.yml`
+  actually changes** between releases — most releases bump the CLI, not the
+  substrate, so the stack image stays put while the PyPI version moves. The
+  image version therefore tracks the latest release in which the compose
+  changed, not every release.
 
 > **Not a multi-arch image.** The published artifact is a single OCI manifest
 > produced by `docker compose publish` — it *references* the upstream `mongo:8.0`
@@ -81,6 +86,11 @@ consumer that needs byte-for-byte reproducibility should pin the upstream image
 ## Publishing
 
 [`.github/workflows/publish-stack.yml`](../.github/workflows/publish-stack.yml)
-runs on a `v*` tag (or `workflow_dispatch`): it validates the compose, logs in to
-GHCR with the workflow token, `docker compose publish`es the OCI artifact at the
-version tag and `latest`, and attaches `docker-compose.yml` to the release.
+runs on every **push to `main`** (a merged PR). Its `tag` job derives the version
+from `pyproject.toml` and creates the `v<version>` git tag (so tags track the
+PyPI release 1:1), then gates: it only proceeds to publish when `docker-compose.yml`
+differs from the previous tag. When it does, the `publish-stack` job validates the
+compose, logs in to GHCR with the workflow token, `docker compose publish`es the
+OCI artifact at the version tag and `latest`, and attaches `docker-compose.yml` to
+the release. A `workflow_dispatch` with a `tag` input force-(re)publishes a
+specific version's stack regardless of the gate.

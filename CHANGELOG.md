@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-06-21
+
+### Changed
+
+- `publish-stack.yml` now runs on every push to `main`: a `tag` job derives the version from `pyproject.toml` and creates the `v<version>` git tag (tags now track the PyPI release 1:1), and the stack OCI image is **republished only when `docker-compose.yml` changed** since the previous tag — most releases bump the CLI, not the substrate, so the image no longer churns on every merge. A `workflow_dispatch` with a `tag` input still force-(re)publishes a specific version. (`docs/stack-image.md` + `CLAUDE.md` updated.)
+
 ## [0.5.0] - 2026-06-20
 
 ### Added

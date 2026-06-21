@@ -1,50 +1,127 @@
-name: Publish storage stack to GHCR
+name: Release — auto-tag + conditional stack publish
 
-# Publishes the storage substrate (docker-compose.yml) on a version tag.
+# On every push to main (a merged PR) this tags the commit `vX.Y.Z` from the
+# pyproject version, so git tags track the PyPI release 1:1 (PyPI itself is
+# published by publish.yml on the same push). The storage-stack OCI artifact
+# (docker-compose.yml -> ghcr.io/<owner>/data-refinery-stack) is republished
+# ONLY when docker-compose.yml actually changed since the previous tag — most
+# PRs touch CLI code, not the substrate, so the image would otherwise be
+# byte-identical churn.
 #
-# Two consumption paths are published for the same version (issue #1):
-#   1. An OCI artifact via `docker compose publish` —
-#      ghcr.io/agentculture/data-refinery-stack:<version> (+ :latest).
-#      The artifact is a SINGLE manifest that REFERENCES the upstream
-#      mongo:8.0 + neo4j:5-community images (which are themselves multi-arch);
-#      it is not a custom multi-arch image. Consume with:
-#        docker compose -f oci://ghcr.io/agentculture/data-refinery-stack:<version> up -d
-#   2. The raw docker-compose.yml attached to the GitHub Release, for consumers
-#      whose docker/compose predates OCI compose support — curl + `-f` it.
+# Manual (re)publish of a specific version: run via workflow_dispatch with the
+# tag input; that always publishes the stack for that tag.
 #
-# Tags are immutable per release: a given <version> is published once.
+# When the stack IS published, two consumption paths ship for the version:
+#   1. OCI via `docker compose publish` —
+#      ghcr.io/<owner>/data-refinery-stack:<version> (+ :latest). A single
+#      manifest REFERENCING upstream mongo:8.0 + neo4j:5-community (not a custom
+#      image). Consume with:
+#        docker compose -f oci://ghcr.io/<owner>/data-refinery-stack:<version> up -d
+#   2. The raw docker-compose.yml attached to the GitHub Release.
+#
+# Tags/releases are immutable per version: a given <version> is published once.
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to publish (e.g. v0.4.0)"
+        description: "Tag to (re)publish the stack for, e.g. v0.5.0"
         required: true
 
-permissions:
-  contents: write   # create/attach the release asset
-  packages: write   # push the OCI artifact to GHCR
-
 jobs:
-  publish-stack:
+  tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version tag
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Resolve version + image ref
+      - name: Plan tag + compose-change gate
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # Manual: (re)publish exactly the requested tag, always.
+            TAG="$INPUT_TAG"
+            VERSION="${TAG#v}"
+            PUBLISH="true"
+            echo "Manual dispatch: will publish stack for ${TAG}"
+          else
+            # Push to main: derive the version from pyproject and tag it.
+            VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n1)"
+            if [ -z "$VERSION" ]; then
+              echo "::error::could not read version from pyproject.toml"
+              exit 1
+            fi
+            TAG="v${VERSION}"
+            if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+              echo "Tag ${TAG} already exists — no new release."
+              {
+                echo "tag=${TAG}"
+                echo "version=${VERSION}"
+                echo "publish=false"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # Compose-change gate vs the previous tag (before we add the new one).
+            PREV="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+            if [ -z "$PREV" ] || ! git diff --quiet "${PREV}" HEAD -- docker-compose.yml; then
+              PUBLISH="true"
+              echo "Substrate changed (or bootstrap) since ${PREV:-none} — will publish stack."
+            else
+              PUBLISH="false"
+              echo "docker-compose.yml unchanged since ${PREV} — tag only, no stack publish."
+            fi
+          fi
+
+          # Create the tag if it does not exist yet (push: always new here;
+          # dispatch: only when targeting a not-yet-created tag).
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "data-refinery-cli ${TAG}"
+            git push origin "${TAG}"
+            echo "Created and pushed ${TAG}"
+          fi
+
+          {
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "publish=${PUBLISH}"
+          } >> "$GITHUB_OUTPUT"
+
+  publish-stack:
+    needs: tag
+    if: needs.tag.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create/attach the release asset
+      packages: write # push the OCI artifact to GHCR
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+
+      - name: Resolve image ref
         id: ref
         run: |
-          RAW_TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          VERSION="${RAW_TAG#v}"
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/data-refinery-stack"
           IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
-          echo "raw_tag=${RAW_TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "Publishing ${IMAGE}:${VERSION}"
+          echo "Publishing ${IMAGE}:${{ needs.tag.outputs.version }}"
 
       - name: Verify compose + OCI publish support
         run: |
@@ -64,7 +141,7 @@ jobs:
       - name: Publish compose as an OCI artifact
         env:
           IMAGE: ${{ steps.ref.outputs.image }}
-          VERSION: ${{ steps.ref.outputs.version }}
+          VERSION: ${{ needs.tag.outputs.version }}
         run: |
           docker compose -f docker-compose.yml publish "${IMAGE}:${VERSION}" -y
           docker compose -f docker-compose.yml publish "${IMAGE}:latest" -y
@@ -72,24 +149,30 @@ jobs:
       - name: Attach docker-compose.yml to the release (portable fallback)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RAW_TAG: ${{ steps.ref.outputs.raw_tag }}
+          RAW_TAG: ${{ needs.tag.outputs.tag }}
+          IMAGE: ${{ steps.ref.outputs.image }}
+          VERSION: ${{ needs.tag.outputs.version }}
         run: |
           if gh release view "${RAW_TAG}" >/dev/null 2>&1; then
             gh release upload "${RAW_TAG}" docker-compose.yml --clobber
           else
-            # --target pins the release (and creates the tag) at this commit, so
-            # a manual workflow_dispatch with a not-yet-existing tag still works.
+            # --target pins the release (and the tag) at this commit, so a manual
+            # dispatch for a not-yet-existing tag still works.
             gh release create "${RAW_TAG}" docker-compose.yml \
               --target "${GITHUB_SHA}" \
               --title "${RAW_TAG}" \
-              --notes "Storage stack (mongo 27018 + neo4j 7687). OCI: docker compose -f oci://${{ steps.ref.outputs.image }}:${{ steps.ref.outputs.version }} up -d"
+              --notes "Storage stack (mongo 27018 + neo4j 7687). OCI: docker compose -f oci://${IMAGE}:${VERSION} up -d"
           fi
 
       - name: Summary
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+          VERSION: ${{ needs.tag.outputs.version }}
+          RAW_TAG: ${{ needs.tag.outputs.tag }}
         run: |
           {
             echo "### Storage stack published"
             echo ""
-            echo "- OCI: \`docker compose -f oci://${{ steps.ref.outputs.image }}:${{ steps.ref.outputs.version }} up -d\`"
-            echo "- Release asset: \`docker-compose.yml\` on release ${{ steps.ref.outputs.raw_tag }}"
+            echo "- OCI: \`docker compose -f oci://${IMAGE}:${VERSION} up -d\`"
+            echo "- Release asset: \`docker-compose.yml\` on release ${RAW_TAG}"
           } >> "$GITHUB_STEP_SUMMARY"
