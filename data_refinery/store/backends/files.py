@@ -124,7 +124,14 @@ class FilesBackend:
         for path in sorted(root.glob(_JSONL_GLOB)):
             files += 1
             self._assert_contained(path, root)
-            original = path.read_text(encoding="utf-8")
+            try:
+                original = path.read_text(encoding="utf-8")
+            except OSError as exc:  # unreadable scope file is an environment fault
+                raise CliError(
+                    code=EXIT_ENV_ERROR,
+                    message=f"could not read {path.name}: {exc}",
+                    remediation=f"check permissions on {path}",
+                ) from exc
             new_text = _serialize(self._migrate_lines(original, transform, path))
             if new_text == original:
                 skipped += 1
@@ -154,16 +161,35 @@ class FilesBackend:
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise CliError(
-                    code=EXIT_ENV_ERROR,
-                    message=f"corrupt line in {path.name}: {exc}",
-                    remediation=f"remove or repair the corrupt line in {path}",
-                ) from exc
-            env = _to_envelope(obj, transform)
+                raise self._corrupt_line(path, exc) from exc
+            if not isinstance(obj, dict):  # valid JSON but not an object: [] "x" 1
+                raise self._corrupt_line(path, f"expected a JSON object, got {type(obj).__name__}")
+            try:
+                env = _to_envelope(obj, transform)
+            except CliError:
+                raise  # already structured (e.g. unknown visibility) — keep its code
+            except (KeyError, TypeError, AttributeError, ValueError) as exc:
+                # A dict missing required keys (e.g. no ``id``) is a corrupt line,
+                # not a code-1 "unexpected" wrap — surface it as such, with code 2.
+                raise self._corrupt_line(path, exc) from exc
             if env is None:  # transform dropped the record (e.g. a tombstone)
                 continue
             out.append(_validate(env))
         return out
+
+    @staticmethod
+    def _corrupt_line(path: Path, detail: object) -> CliError:
+        """Build the structured ``corrupt line`` error (code 2) for *path*.
+
+        Shared by the migration and the day-to-day load path so a malformed
+        scope line always surfaces as an environment fault with a repair
+        remediation — never a generic code-1 "unexpected" wrap.
+        """
+        return CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"corrupt line in {path.name}: {detail}",
+            remediation=f"remove or repair the corrupt line in {path}",
+        )
 
     @staticmethod
     def _assert_contained(path: Path, root: Path) -> None:
@@ -224,13 +250,17 @@ class FilesBackend:
             if not line:
                 continue
             try:
-                out.append(Envelope.from_dict(json.loads(line)))
-            except (json.JSONDecodeError, KeyError) as exc:
-                raise CliError(
-                    code=EXIT_ENV_ERROR,
-                    message=f"corrupt line in {path.name}: {exc}",
-                    remediation=f"remove or repair the corrupt line in {path}",
-                ) from exc
+                obj = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise self._corrupt_line(path, exc) from exc
+            if not isinstance(obj, dict):  # valid JSON but not an object
+                raise self._corrupt_line(path, f"expected a JSON object, got {type(obj).__name__}")
+            try:
+                out.append(Envelope.from_dict(obj))
+            except CliError:
+                raise  # already structured (e.g. unknown visibility) — keep its code
+            except (KeyError, TypeError, AttributeError, ValueError) as exc:
+                raise self._corrupt_line(path, exc) from exc
         return out
 
     def _save(self, path: Path, records: list[Envelope]) -> None:
@@ -243,18 +273,27 @@ class FilesBackend:
         same-filesystem atomic rename: a crash leaves either the old file or the
         new one — never a half-written file. Shared by ``upsert``/``delete`` and
         the migration rewrite, so every write to a scope file is durable.
+
+        A write fault (full disk, denied permission, cross-device temp) deletes
+        the temp and surfaces as a structured ``CliError`` with **exit code 2**
+        (environment fault) — never a raw ``OSError`` that the dispatcher would
+        wrap as a generic code-1 "unexpected" error.
         """
-        path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + _TMP_SUFFIX)
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             tmp.write_text(text, encoding="utf-8")
             os.replace(tmp, path)
-        except OSError:
+        except OSError as exc:
             try:
                 tmp.unlink()
             except OSError:  # pragma: no cover - best effort cleanup
                 pass
-            raise
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=f"could not write {path.name}: {exc}",
+                remediation=f"check free space and permissions on {path.parent}",
+            ) from exc
 
 
 def _serialize(records: list[Envelope]) -> str:
@@ -281,8 +320,8 @@ def _validate(env: Envelope) -> Envelope:
     return env
 
 
-def _to_envelope(obj: object, transform: Transform | None) -> Envelope | None:
-    """Map one decoded line to an Envelope (or None to drop it).
+def _to_envelope(obj: dict[str, Any], transform: Transform | None) -> Envelope | None:
+    """Map one decoded line (guaranteed a dict by the caller) to an Envelope.
 
     ``transform=None`` self-canonicalises (every line is already data-refinery's
     own form). With a *transform*, an already-canonical line is kept **verbatim**
@@ -291,17 +330,19 @@ def _to_envelope(obj: object, transform: Transform | None) -> Envelope | None:
     knowing the consumer's legacy schema. The "already-canonical" test
     (``already.to_dict() == obj``) is exact because the Envelope round-trip is a
     stable fixpoint, so the consumer's transform need not itself be idempotent.
+
+    A shape error (missing ``id``, etc.) propagates to the caller, which maps it
+    to a structured code-2 "corrupt line" error.
     """
     if transform is None:
-        return Envelope.from_dict(obj)  # type: ignore[arg-type]
-    if isinstance(obj, dict):
-        try:
-            already = Envelope.from_dict(obj)
-        except (KeyError, TypeError, AttributeError, ValueError, CliError):
-            already = None
-        if already is not None and already.to_dict() == obj:
-            return already
-    return transform(obj)  # type: ignore[arg-type]
+        return Envelope.from_dict(obj)
+    try:
+        already = Envelope.from_dict(obj)
+    except (KeyError, TypeError, AttributeError, ValueError, CliError):
+        already = None
+    if already is not None and already.to_dict() == obj:
+        return already
+    return transform(obj)
 
 
 def build(**_kwargs: object) -> Backend:

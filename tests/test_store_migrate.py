@@ -219,7 +219,9 @@ def test_whole_store_validation_aborts_before_any_write(tmp_path: Path) -> None:
     assert list(base.glob("*.tmp")) == []  # nothing half-written
 
 
-def test_atomic_write_failure_leaves_original_intact(tmp_path: Path, monkeypatch) -> None:
+def test_atomic_write_failure_surfaces_code_2_and_leaves_original_intact(
+    tmp_path: Path, monkeypatch
+) -> None:
     base = _seed(tmp_path, [_NEEDS_HASH])
     path = base / "default__public.jsonl"
     before = path.read_bytes()
@@ -228,10 +230,107 @@ def test_atomic_write_failure_leaves_original_intact(tmp_path: Path, monkeypatch
         raise OSError("simulated crash before the atomic swap")
 
     monkeypatch.setattr(files_mod.os, "replace", boom)
-    with pytest.raises(OSError):
+    with pytest.raises(CliError) as exc:
         FilesBackend(base_dir=str(base)).migrate()
+    assert exc.value.code == 2  # environment fault, not a generic code-1 wrap
     assert path.read_bytes() == before  # original intact — os.replace never ran
     assert list(base.glob("*.tmp")) == []  # temp sibling cleaned up
+
+
+def test_non_object_json_line_aborts_with_code_2(tmp_path: Path) -> None:
+    # Valid JSON but not an object ([], "x", 1) must be a structured "corrupt
+    # line" (code 2), not an AttributeError wrapped as a generic code-1 error.
+    base = tmp_path / "store"
+    base.mkdir()
+    path = base / "default__public.jsonl"
+    path.write_text("[1, 2, 3]\n", encoding="utf-8")
+    before = path.read_bytes()
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).migrate()
+    assert exc.value.code == 2
+    assert "expected a JSON object" in exc.value.message
+    assert path.read_bytes() == before  # untouched
+
+
+def test_object_missing_id_aborts_with_code_2(tmp_path: Path) -> None:
+    # A dict missing the required ``id`` raises KeyError inside Envelope.from_dict;
+    # it must surface as a code-2 corrupt line, not a code-1 "unexpected" wrap.
+    base = tmp_path / "store"
+    base.mkdir()
+    path = base / "default__public.jsonl"
+    path.write_text(json.dumps({"content": "x"}) + "\n", encoding="utf-8")
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).migrate()
+    assert exc.value.code == 2
+
+
+def test_unreadable_scope_file_surfaces_code_2(tmp_path: Path) -> None:
+    # A read fault (here: a directory where a scope file is expected -> the glob
+    # matches it but read_text raises IsADirectoryError) is an environment fault.
+    base = tmp_path / "store"
+    base.mkdir()
+    (base / "weird__public.jsonl").mkdir()
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).migrate()
+    assert exc.value.code == 2
+    assert "could not read" in exc.value.message
+
+
+def test_self_canonicalize_bad_visibility_source_propagates_cli_error(tmp_path: Path) -> None:
+    # A self-canonicalise source line with an unknown visibility: Envelope.from_dict
+    # raises a structured CliError that migrate passes through unchanged (not a
+    # corrupt-line re-wrap, not a generic code-1 "unexpected").
+    base = tmp_path / "store"
+    base.mkdir()
+    (base / "default__public.jsonl").write_text(
+        json.dumps({"id": "a", "content": "x", "scope": {"name": "d", "visibility": "secret"}})
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).migrate()
+    assert exc.value.code == 1  # unknown visibility kept verbatim
+
+
+# --- read-path parity: _load shares the same corrupt-line contract ----------
+
+
+@pytest.mark.parametrize(
+    "line, needle",
+    [
+        ("{not json\n", "corrupt line"),
+        ("[1, 2]\n", "expected a JSON object"),
+        (json.dumps({"content": "x"}) + "\n", "corrupt line"),  # missing id
+    ],
+)
+def test_load_read_path_rejects_malformed_lines(tmp_path: Path, line: str, needle: str) -> None:
+    base = tmp_path / "store"
+    base.mkdir()
+    (base / "default__public.jsonl").write_text(line, encoding="utf-8")
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).all()  # all() -> _load
+    assert exc.value.code == 2 and needle in exc.value.message
+
+
+def test_load_read_path_bad_visibility_propagates_cli_error(tmp_path: Path) -> None:
+    base = tmp_path / "store"
+    base.mkdir()
+    (base / "default__public.jsonl").write_text(
+        json.dumps({"id": "a", "content": "x", "scope": {"visibility": "secret"}}) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).all()
+    assert exc.value.code == 1
+
+
+def test_load_skips_blank_lines(tmp_path: Path) -> None:
+    base = tmp_path / "store"
+    base.mkdir()
+    (base / "default__public.jsonl").write_text(
+        json.dumps(_NEEDS_HASH) + "\n\n  \n", encoding="utf-8"
+    )
+    assert [e.id for e in FilesBackend(base_dir=str(base)).all()] == ["a"]
 
 
 def test_symlinked_scope_file_outside_root_is_refused(tmp_path: Path) -> None:
