@@ -37,7 +37,8 @@ jobs:
       - name: Resolve project version
         id: ver
         run: |
-          echo "version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
+          VERSION=$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''
