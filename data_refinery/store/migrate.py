@@ -39,10 +39,15 @@ def migrate(
     optionally the store root it already owns via *base_dir*) — never a per-file
     write path.
 
-    For re-run idempotency the transform should be a fixpoint on an already-
-    Envelope dict; the files backend enforces this for free by keeping an
-    already-canonical line verbatim, so a typical transform need not special-case
-    it.
+    Idempotent: a second run rewrites nothing. The consumer's transform need
+    **not** itself be idempotent — after the first run every line is a canonical
+    Envelope, and the files backend keeps an already-canonical line **verbatim**
+    (it is never fed back through the transform), so even a non-idempotent
+    transform (one that, say, stamps a timestamp) is applied exactly once. This
+    rests on data-refinery's own Envelope round-trip being a stable fixpoint
+    (``Envelope.from_dict(e.to_dict()).to_dict() == e.to_dict()``), which is
+    guaranteed and test-covered — it is *not* a constraint the consumer must
+    satisfy.
 
     Returns a summary ``{backend, files, migrated, migrated_files, skipped,
     dry_run}``. Idempotent (a second run rewrites nothing) and atomic per file.

@@ -108,6 +108,42 @@ def test_transform_converts_legacy_then_is_idempotent(tmp_path: Path) -> None:
     assert second["migrated"] == 0 and second["skipped"] == 1
 
 
+def test_envelope_round_trip_is_a_fixpoint() -> None:
+    # The whole idempotency contract rests on this: re-serialising an already-
+    # canonical line reproduces it byte-for-byte, so `_to_envelope` recognises it
+    # and keeps it verbatim instead of re-running the transform. Guard it directly
+    # across varied shapes (default/private scope, present/absent metadata+hash).
+    for env in [
+        Envelope(id="a", content="hello"),
+        Envelope(id="b", content="x", scope=Scope("vault", "private")),
+        Envelope(id="c", content="y", metadata={"k": 1, "nested": {"z": [1, 2]}}),
+        Envelope(id="d", content="z", hash="deadbeef"),  # mismatched hash preserved
+    ]:
+        d = env.to_dict()
+        assert Envelope.from_dict(d).to_dict() == d
+
+
+def test_non_idempotent_transform_is_applied_exactly_once(tmp_path: Path) -> None:
+    # A transform that is NOT a fixpoint (it stamps a marker every call). Because
+    # an already-canonical line is kept verbatim, the marker is written once and a
+    # 2nd run never stamps it again — idempotency holds for any transform.
+    base = _seed(tmp_path, [{"key": "a", "value": "hello"}], name="legacy.jsonl")
+    calls = {"n": 0}
+
+    def transform(raw: dict) -> Envelope:
+        calls["n"] += 1
+        return Envelope(id=raw["key"], content=raw["value"], metadata={"stamped": calls["n"]})
+
+    backend = FilesBackend(base_dir=str(base))
+    backend.migrate(transform)
+    after_first = (base / "legacy.jsonl").read_bytes()
+    assert _read_lines(base / "legacy.jsonl")[0]["metadata"] == {"stamped": 1}
+
+    backend.migrate(transform)  # 2nd run: canonical line kept verbatim
+    assert (base / "legacy.jsonl").read_bytes() == after_first  # marker not doubled
+    assert calls["n"] == 1  # transform never called a second time
+
+
 def test_transform_returning_none_drops_the_record(tmp_path: Path) -> None:
     base = _seed(
         tmp_path,
@@ -161,6 +197,26 @@ def test_corrupt_source_line_aborts_with_code_2(tmp_path: Path) -> None:
         FilesBackend(base_dir=str(base)).migrate()
     assert exc.value.code == 2
     assert path.read_bytes() == before  # untouched
+
+
+def test_whole_store_validation_aborts_before_any_write(tmp_path: Path) -> None:
+    # Two files: the first (sorted first) WOULD migrate; the second has a corrupt
+    # line. Validation is whole-store, so the corrupt second file aborts the run
+    # BEFORE the first file is rewritten — not merely before the second.
+    base = tmp_path / "store"
+    base.mkdir()
+    first = base / "a__public.jsonl"
+    first.write_text(
+        json.dumps(_NEEDS_HASH) + "\n", encoding="utf-8"
+    )  # needs a hash -> would change
+    (base / "b__public.jsonl").write_text("{corrupt\n", encoding="utf-8")
+    first_before = first.read_bytes()
+
+    with pytest.raises(CliError) as exc:
+        FilesBackend(base_dir=str(base)).migrate()
+    assert exc.value.code == 2
+    assert first.read_bytes() == first_before  # untouched despite sorting first
+    assert list(base.glob("*.tmp")) == []  # nothing half-written
 
 
 def test_atomic_write_failure_leaves_original_intact(tmp_path: Path, monkeypatch) -> None:

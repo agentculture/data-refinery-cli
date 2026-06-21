@@ -15,6 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - FilesBackend writes are now atomic via a shared _atomic_write helper (temp sibling + os.replace), hardening the day-to-day upsert/delete path against truncate-on-crash, not just migration.
+- store migrate validation is now whole-store: every scope file is transformed and validated before any write, so a corrupt line / invalid transform output / symlink escape in any file aborts the whole migration before it touches disk (was per-file). Orphan temp-file reaping moved to the start of the run. (Folded from a colleague review pass.)
 - docs/contract.md is now contract version 3 (adds the store-migration endpoint).
 
 ## [0.5.2] - 2026-06-21

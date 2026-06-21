@@ -106,12 +106,21 @@ class FilesBackend:
         **idempotent**: a file whose canonical re-serialisation already equals
         its current bytes is left untouched, so a second run rewrites nothing. An
         interrupted run leaves either the old or the new file intact (never a
-        partial file) and is safe to resume. Returns a summary dict.
+        partial file) and is safe to resume. Validation is **whole-store**: every
+        scope file is transformed and validated *before any write*, so a corrupt
+        line, an invalid transform output, or a symlink escape in **any** file
+        aborts the whole migration before it touches disk (not merely before it
+        touches that one file). Returns a summary dict.
         """
         root = self._base.resolve()  # canonicalise once; harden the write sink
-        migrated: list[str] = []
-        skipped = 0
+        self._reap_orphan_tmp(root)  # clear a prior crash's debris before planning
+        # Pass 1 — plan + validate EVERY file before writing one byte. Any
+        # CliError (corrupt line, unknown visibility, symlink escape) raised here
+        # aborts the whole migration with the store untouched (whole-store
+        # abort-safety, strictly stronger than per-file).
+        plan: list[tuple[Path, str]] = []  # (path, new_text) for files that change
         files = 0
+        skipped = 0
         for path in sorted(root.glob(_JSONL_GLOB)):
             files += 1
             self._assert_contained(path, root)
@@ -119,16 +128,19 @@ class FilesBackend:
             new_text = _serialize(self._migrate_lines(original, transform, path))
             if new_text == original:
                 skipped += 1
-                continue
-            migrated.append(path.name)
-            if not dry_run:
+            else:
+                plan.append((path, new_text))
+        # Pass 2 — apply. Every file above validated cleanly; writes are atomic
+        # per file (temp sibling + os.replace), so a crash here still leaves each
+        # file either fully old or fully new and the run is safe to resume.
+        if not dry_run:
+            for path, new_text in plan:
                 self._atomic_write(path, new_text)
-        self._reap_orphan_tmp(root)
         return {
             "backend": "files",
             "files": files,
-            "migrated": len(migrated),
-            "migrated_files": migrated,
+            "migrated": len(plan),
+            "migrated_files": [p.name for p, _ in plan],
             "skipped": skipped,
             "dry_run": dry_run,
         }
@@ -276,7 +288,9 @@ def _to_envelope(obj: object, transform: Transform | None) -> Envelope | None:
     own form). With a *transform*, an already-canonical line is kept **verbatim**
     so a re-run never re-applies the consumer's transform to migrated data — that
     is what makes a second run a byte-for-byte no-op without data-refinery ever
-    knowing the consumer's legacy schema.
+    knowing the consumer's legacy schema. The "already-canonical" test
+    (``already.to_dict() == obj``) is exact because the Envelope round-trip is a
+    stable fixpoint, so the consumer's transform need not itself be idempotent.
     """
     if transform is None:
         return Envelope.from_dict(obj)  # type: ignore[arg-type]
