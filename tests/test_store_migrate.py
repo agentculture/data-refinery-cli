@@ -244,6 +244,29 @@ def test_cli_store_migrate_dry_run_text(files_env: str, capsys) -> None:
     assert "would migrate" in capsys.readouterr().out
 
 
+def test_blank_lines_are_skipped(tmp_path: Path) -> None:
+    base = tmp_path / "store"
+    base.mkdir()
+    path = base / "default__public.jsonl"
+    path.write_text(json.dumps(_NEEDS_HASH) + "\n\n   \n", encoding="utf-8")  # trailing blanks
+    result = FilesBackend(base_dir=str(base)).migrate()
+    assert result["migrated"] == 1
+    assert len(_read_lines(path)) == 1  # blank lines dropped, not preserved
+
+
+def test_orphan_temp_from_a_prior_crash_is_reaped(tmp_path: Path) -> None:
+    # An already-canonical store (nothing to rewrite) plus an orphan temp under a
+    # *different* name — the residue of a prior interrupted run on another file.
+    backend = FilesBackend(base_dir=str(tmp_path / "store"))
+    backend.upsert(Envelope(id="a", content="hello"))
+    orphan = (tmp_path / "store") / "stale__public.jsonl.tmp"
+    orphan.write_text("half-written garbage from a crash\n", encoding="utf-8")
+    result = backend.migrate()
+    assert result["migrated"] == 0  # nothing to rewrite
+    assert not orphan.exists()  # but the orphan temp was reaped
+    assert list((tmp_path / "store").glob("*.tmp")) == []
+
+
 def test_cli_store_migrate_unsupported_backend_exits_1(files_env: str, capsys) -> None:
     # JSON mode: a structured error line on stderr (never a traceback).
     assert main(["store", "migrate", "--backend", "neo4j", "--json"]) == 1

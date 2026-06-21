@@ -166,7 +166,7 @@ class FilesBackend:
         resolved = path.resolve()
         try:
             contained = os.path.commonpath([str(resolved), str(root)]) == str(root)
-        except ValueError:  # different drives / mixed roots
+        except ValueError:  # pragma: no cover - different drives / mixed roots (Windows)
             contained = False
         if not contained:
             raise CliError(
