@@ -6,8 +6,8 @@ shape, exit-code meaning, or the image tag scheme requires a **version bump** in
 [`pyproject.toml`](../pyproject.toml) (the `version-check` CI job enforces a bump
 on every PR).
 
-- **Contract version:** `2` (Wave 2 — adds the store + data-quality surface to
-  the Wave 1 infrastructure surface).
+- **Contract version:** `3` (Wave 3 — adds the store-migration endpoint to the
+  Wave 2 store + data-quality surface).
 - **Package version pinned by a consumer:** see `pyproject.toml` `version`.
 
 ## Wave 1 — the storage stack (stable)
@@ -90,6 +90,11 @@ are **no** memory fields: a consumer's `lifecycle` / `signal` / `recall_count` /
 - `store get <id> --json` → the envelope plus `"found": true`, or
   `{"id": "...", "found": false}`. Scope-filtered (`--scope`/`--visibility`).
 - `store list --json` → a JSON array of envelopes visible to the scope.
+- `store migrate --json` → `{"backend", "files", "migrated", "migrated_files":
+  [...], "skipped", "dry_run"}`. Re-canonicalises data-refinery's **own**
+  Envelope-JSONL (self-heal / format-version pass); `--dry-run` reports without
+  writing. **Idempotent** — a second run rewrites nothing (`migrated: 0`).
+  Files-only today; `--backend mongo|neo4j` exits `1` with a `hint:`.
 
 ### `data-refinery` data-quality verbs
 
@@ -125,6 +130,46 @@ A store/quality verb selecting `--backend mongo|neo4j` without the extra exits
 - **Public/private scope no-leak** — a private-scope document is **never**
   returned by a public-scope `get`/`list` (`can_serve` is enforced by every
   backend, not just the consumer).
+
+## Wave 3 — the store-migration endpoint (stable)
+
+data-refinery **owns** the on-disk store layout, so it owns the **rewrite** that
+upgrades a populated store to the current Envelope format. A consumer upgrading a
+legacy store supplies only a **transform** and never constructs a filesystem
+write path itself — the path-construction concern (and any path-safety review)
+lives with the component that owns, and can reason about, the store directory.
+
+### Importable primitive
+
+```python
+from data_refinery.store import migrate
+
+# Upgrade a populated legacy store. The consumer owns its legacy schema and
+# passes a converter; data-refinery resolves the root and owns the atomic rewrite.
+summary = migrate(record_to_envelope, base_dir="/path/to/store")  # -> dict
+# record_to_envelope: Callable[[dict], Envelope | None]  (None drops a record)
+```
+
+`migrate(transform=None, *, backend="files", base_dir=None, dry_run=False)`
+returns `{backend, files, migrated, migrated_files, skipped, dry_run}`. With
+`transform=None` it re-canonicalises data-refinery's own Envelope-JSONL (the
+self-heal path the `store migrate` CLI verb uses). The consumer supplies a
+transform (and optionally the store root it already owns) — **never** a per-file
+write path.
+
+### Invariants the consumer can rely on
+
+- **Idempotent** — a second run rewrites nothing (`migrated: 0`); a file whose
+  canonical re-serialisation already equals its bytes is left untouched.
+- **Atomic per file** — each file is rewritten via a temp sibling + `os.replace`;
+  an interrupted run leaves either the old or the new file intact (never a
+  partial file) and is safe to resume.
+- **Validated before write** — every produced envelope is checked (a transform
+  that yields an unknown `scope.visibility` aborts that file's migration before
+  any write, exit `1` with a `hint:`); a corrupt source line aborts with exit `2`
+  and leaves the original file untouched. Never a traceback.
+- **Files granularity only** today — `mongo` (vectors) / `neo4j` (graph)
+  migration are a later granularity and exit `1` with a `hint:`.
 
 ## Versioning policy
 

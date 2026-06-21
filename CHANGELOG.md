@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-21
+
+### Added
+
+- store migration endpoint (issue #8): importable data_refinery.store.migrate(transform, *, backend, base_dir, dry_run) mirrored by the data-refinery store migrate CLI verb — a consumer upgrades a populated on-disk store to the current Envelope format by supplying only a transform, never constructing a filesystem write path (the rewrite, and its path-construction concern, lives behind data-refinery's boundary).
+- store migrate is atomic per file (temp sibling + os.replace) and idempotent (a second run rewrites nothing, byte-identical); files granularity only today (mongo/neo4j raise a structured CliError as the files-first seam).
+
+### Changed
+
+- FilesBackend writes are now atomic via a shared _atomic_write helper (temp sibling + os.replace), hardening the day-to-day upsert/delete path against truncate-on-crash, not just migration.
+- docs/contract.md is now contract version 3 (adds the store-migration endpoint).
+
 ## [0.5.2] - 2026-06-21
 
 ### Changed

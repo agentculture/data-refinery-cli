@@ -19,6 +19,7 @@ import sys
 from data_refinery.cli._errors import EXIT_USER_ERROR, CliError
 from data_refinery.cli._output import emit_result
 from data_refinery.store import get_backend
+from data_refinery.store import migrate as store_migrate
 from data_refinery.store.envelope import DEFAULT_SCOPE, Envelope, Scope
 
 _BACKENDS = ("files", "mongo", "neo4j")
@@ -125,6 +126,31 @@ def cmd_store_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_store_migrate(args: argparse.Namespace) -> int:
+    """Re-canonicalise the store's own Envelope-JSONL (self-heal / format bump).
+
+    The CLI boundary cannot carry a Python transform, so this verb only
+    normalises data-refinery's **own** format — re-validate each line, re-fill a
+    missing hash, rewrite atomically per file. A consumer upgrading a *legacy*
+    format imports ``data_refinery.store.migrate(transform)`` and supplies the
+    transform there; over the CLI there is no write path for a consumer to
+    construct. The store root comes from ``DR_DATA_DIR`` (never a flag), so the
+    owner — not the caller — resolves where the rewrite lands.
+    """
+    json_mode = bool(getattr(args, "json", False))
+    result = store_migrate(transform=None, backend=args.backend, dry_run=args.dry_run)
+    if json_mode:
+        emit_result(result, json_mode=True)
+    else:
+        verb = "would migrate" if args.dry_run else "migrated"
+        emit_result(
+            f"{verb} {result['migrated']}/{result['files']} file(s); "
+            f"{result['skipped']} already canonical",
+            json_mode=False,
+        )
+    return 0
+
+
 def _store_overview(args: argparse.Namespace) -> int:
     """`data-refinery store` with no sub-verb prints the noun's overview."""
     from data_refinery.cli._commands.overview import emit_overview
@@ -136,6 +162,7 @@ def _store_overview(args: argparse.Namespace) -> int:
                 "store put — upsert an envelope (JSON on stdin, or --id/--content)",
                 "store get <id> — fetch an envelope visible to a scope",
                 "store list — list envelopes visible to a scope",
+                "store migrate — re-canonicalise the store's own Envelope-JSONL (self-heal)",
             ],
         },
         {
@@ -215,6 +242,19 @@ def register(sub: argparse._SubParsersAction) -> None:
     _add_backend_flag(list_p)
     _add_json_flag(list_p)
     list_p.set_defaults(func=cmd_store_list)
+
+    mig = verb.add_parser(
+        "migrate",
+        help="Re-canonicalise the store's own Envelope-JSONL (self-heal / format bump).",
+    )
+    _add_backend_flag(mig)
+    mig.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would change without writing.",
+    )
+    _add_json_flag(mig)
+    mig.set_defaults(func=cmd_store_migrate)
 
     ov = verb.add_parser("overview", help="Describe the store noun.")
     _add_json_flag(ov)

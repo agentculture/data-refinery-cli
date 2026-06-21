@@ -174,6 +174,10 @@ automatically when omitted.
 - `data-refinery store get <id>` — fetch an envelope visible to a scope. Returns
   `{...,"found":true}` or `{"id":…,"found":false}`.
 - `data-refinery store list` — list envelopes visible to a scope.
+- `data-refinery store migrate` — re-canonicalise the store's **own**
+  Envelope-JSONL (re-validate each line, re-fill a missing hash, rewrite
+  atomically per file). A self-heal / format-version pass; idempotent (a second
+  run rewrites nothing). `--dry-run` reports without writing.
 
 ## Backends & scope
 
@@ -183,11 +187,26 @@ automatically when omitted.
 - `--scope`/`--visibility` select the scope. A **private**-scope document is
   never returned by a **public**-scope fetch (`can_serve`).
 
+## Migration (consumers)
+
+data-refinery **owns** the on-disk layout, so it owns the rewrite. A consumer
+upgrading a populated *legacy* store imports the library and supplies only a
+transform — never a filesystem write path:
+
+    from data_refinery.store import migrate
+    migrate(record_to_envelope, base_dir="/path/to/store")  # files backend
+
+The rewrite is atomic per file (temp sibling + `os.replace`) and idempotent. The
+CLI `store migrate` verb cannot carry a Python transform, so it self-canonicalises
+data-refinery's own format only. Only the `files` backend migrates today;
+`mongo`/`neo4j` are a later granularity and exit `1` with a `hint:`.
+
 ## Usage
 
     echo '{"id":"a","content":"hello"}' | data-refinery store put --json
     data-refinery store get a --json
     data-refinery store list --scope vault --visibility private --json
+    data-refinery store migrate --dry-run --json
 """
 
 _VALIDATE = """\
@@ -268,6 +287,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("store", "put"): _STORE,
     ("store", "get"): _STORE,
     ("store", "list"): _STORE,
+    ("store", "migrate"): _STORE,
     ("store", "overview"): _STORE,
     ("validate",): _VALIDATE,
     ("dedup",): _DEDUP,

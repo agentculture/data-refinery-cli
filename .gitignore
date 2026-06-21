@@ -234,3 +234,5 @@ skills.local.yaml
 
 # data-refinery stack bind-mount data (docker-compose volumes)
 .data/
+
+.devague/reviews/
