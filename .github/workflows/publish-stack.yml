@@ -67,17 +67,14 @@ jobs:
               exit 1
             fi
             TAG="v${VERSION}"
-            if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-              echo "Tag ${TAG} already exists — no new release."
-              {
-                echo "tag=${TAG}"
-                echo "version=${VERSION}"
-                echo "publish=false"
-              } >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            # Compose-change gate vs the previous tag (before we add the new one).
-            PREV="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+            # Previous tag = highest v* EXCLUDING the current one. Excluding TAG
+            # matters on a re-run: if an earlier run pushed the tag but then
+            # failed before publishing, we must still compare against the real
+            # previous release and be able to re-publish to recover — never treat
+            # "tag exists" as "already published" and skip. Tag CREATION below is
+            # still idempotent (skipped when the tag exists); only publishing is
+            # decided by the compose-change gate.
+            PREV="$(git tag --list 'v*' --sort=-v:refname | grep -vxF "${TAG}" | head -n1 || true)"
             if [ -z "$PREV" ] || ! git diff --quiet "${PREV}" HEAD -- docker-compose.yml; then
               PUBLISH="true"
               echo "Substrate changed (or bootstrap) since ${PREV:-none} — will publish stack."
