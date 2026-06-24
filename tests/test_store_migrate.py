@@ -431,3 +431,30 @@ def test_cli_store_migrate_unsupported_backend_exits_1(files_env: str, capsys) -
     # Text mode: the same error renders the load-bearing `hint:` prefix.
     assert main(["store", "migrate", "--backend", "mongo"]) == 1
     assert "hint:" in capsys.readouterr().err
+
+
+# --- write_gitignore through the importable endpoint -------------------------
+
+
+def test_migrate_write_gitignore_creates_gitignore(tmp_path: Path) -> None:
+    # Seed a scope file WITHOUT write_gitignore so no .gitignore exists yet.
+    store.put(Envelope(id="a", content="x"), backend="files", base_dir=str(tmp_path))
+    assert not (tmp_path / ".gitignore").exists()
+    store.migrate(base_dir=str(tmp_path), write_gitignore=True)
+    assert (tmp_path / ".gitignore").exists()
+    assert (tmp_path / ".gitignore").read_text(
+        encoding="utf-8"
+    ) == "*\n!.gitignore\n!*__public.jsonl\n"
+
+
+def test_migrate_write_gitignore_dry_run_does_not_create(tmp_path: Path) -> None:
+    store.put(Envelope(id="a", content="x"), backend="files", base_dir=str(tmp_path))
+    assert not (tmp_path / ".gitignore").exists()
+    store.migrate(base_dir=str(tmp_path), write_gitignore=True, dry_run=True)
+    assert not (tmp_path / ".gitignore").exists()
+
+
+def test_migrate_default_no_write_gitignore(tmp_path: Path) -> None:
+    store.put(Envelope(id="a", content="x"), backend="files", base_dir=str(tmp_path))
+    store.migrate(base_dir=str(tmp_path))
+    assert not (tmp_path / ".gitignore").exists()

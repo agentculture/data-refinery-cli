@@ -28,6 +28,7 @@ def migrate(
     *,
     backend: str = DEFAULT_BACKEND,
     base_dir: str | None = None,
+    write_gitignore: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Upgrade an on-disk store to the current Envelope format.
@@ -38,6 +39,11 @@ def migrate(
     into an :class:`Envelope`; the consumer supplies only the transform (and
     optionally the store root it already owns via *base_dir*) — never a per-file
     write path.
+
+    With ``write_gitignore=True`` the files backend materialises the fail-closed
+    ``.gitignore`` (``* / !.gitignore / !*__public.jsonl``) during the apply pass;
+    a dry_run never writes it; default ``False`` is byte-identical to today.
+    Files backend only.
 
     Idempotent: a second run rewrites nothing. The consumer's transform need
     **not** itself be idempotent — after the first run every line is a canonical
@@ -55,7 +61,9 @@ def migrate(
     structured :class:`CliError`.
     """
     if backend == "files":
-        return FilesBackend(base_dir).migrate(transform, dry_run=dry_run)
+        return FilesBackend(base_dir, write_gitignore=write_gitignore).migrate(
+            transform, dry_run=dry_run
+        )
     raise CliError(
         code=EXIT_USER_ERROR,
         message=f"store migration is not yet supported for backend {backend!r}",
