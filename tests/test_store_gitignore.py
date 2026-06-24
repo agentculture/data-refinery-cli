@@ -142,3 +142,20 @@ def test_store_put_forwards_write_gitignore(tmp_path) -> None:
     )
     assert (tmp_path / ".gitignore").exists()
     assert (tmp_path / ".gitignore").read_text() == _GITIGNORE_CONTENT
+
+
+# ------------------------------------------------------------------
+# Crash hygiene
+# ------------------------------------------------------------------
+
+
+def test_orphan_gitignore_tmp_is_reaped_by_migrate(tmp_path) -> None:
+    """A stray .gitignore.tmp (a crashed write's debris) is reaped on migrate."""
+    backend = FilesBackend(base_dir=str(tmp_path), write_gitignore=True)
+    backend.upsert(Envelope(id="a", content="hello"))  # scope file + .gitignore
+    stray = tmp_path / ".gitignore.tmp"
+    stray.write_text("debris")
+    backend.migrate()  # reaps orphan temps before planning
+    assert not stray.exists()
+    # The real .gitignore is untouched (create-when-absent on a re-materialise).
+    assert (tmp_path / ".gitignore").read_text() == _GITIGNORE_CONTENT
