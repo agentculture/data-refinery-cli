@@ -32,16 +32,45 @@ Transform = Callable[[dict[str, Any]], Envelope | None]
 class FilesBackend:
     """Persist envelopes as JSONL files, one file per scope."""
 
-    def __init__(self, base_dir: str | None = None) -> None:
+    def __init__(self, base_dir: str | None = None, *, write_gitignore: bool = False) -> None:
         if base_dir is None:
             base_dir = os.environ.get(_ENV_DIR) or str(Path.home() / ".data-refinery" / "store")
         self._base = Path(base_dir)
         self._base.mkdir(parents=True, exist_ok=True)
+        self._write_gitignore = write_gitignore
 
     # -- Backend protocol -----------------------------------------------
 
+    def _ensure_gitignore(self) -> None:
+        """Create ``.gitignore`` in *base_dir* when ``write_gitignore`` is set.
+
+        Only creates the file when it does not already exist (never overwrites
+        user edits). If writing raises ``OSError``, surfaces a structured
+        ``CliError`` — never a traceback.
+        """
+        if not self._write_gitignore:
+            return
+        gi = self._base / ".gitignore"
+        if gi.exists():
+            return
+        try:
+            path = self._base / ".gitignore.tmp"
+            path.write_text("*\n!.gitignore\n!*__public.jsonl\n", encoding="utf-8")
+            os.replace(path, gi)
+        except OSError as exc:
+            try:
+                path.unlink()
+            except OSError:  # pragma: no cover - best effort
+                pass
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=f"could not write .gitignore: {exc}",
+                remediation=f"check permissions on {self._base}",
+            ) from exc
+
     def upsert(self, envelope: Envelope) -> None:
         """Insert or replace *envelope* idempotently (by id; dedup by hash on insert)."""
+        self._ensure_gitignore()
         path = self._scope_file(envelope.scope)
         records = self._load(path)
 
@@ -141,6 +170,7 @@ class FilesBackend:
         # per file (temp sibling + os.replace), so a crash here still leaves each
         # file either fully old or fully new and the run is safe to resume.
         if not dry_run:
+            self._ensure_gitignore()
             for path, new_text in plan:
                 self._atomic_write(path, new_text)
         return {
@@ -345,6 +375,8 @@ def _to_envelope(obj: dict[str, Any], transform: Transform | None) -> Envelope |
     return transform(obj)
 
 
-def build(**_kwargs: object) -> Backend:
-    """Factory: a default FilesBackend (ignores kwargs like ``timeout_ms``)."""
-    return FilesBackend()
+def build(
+    *, base_dir: str | None = None, write_gitignore: bool = False, **_kwargs: object
+) -> Backend:
+    """Factory: a FilesBackend honouring ``base_dir`` and ``write_gitignore``."""
+    return FilesBackend(base_dir, write_gitignore=write_gitignore)
