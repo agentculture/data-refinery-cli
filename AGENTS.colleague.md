@@ -16,7 +16,9 @@ behavior, update both.
 data-refinery-cli owns the **storage + data-quality infrastructure layer** split
 out of eidetic-cli (issue #1): the mongo + neo4j substrate, the docker stack
 (published to GHCR), a storage-neutral **store** (`store put/get/list` over a
-files/mongo/neo4j `Backend`, also importable as `data_refinery.store`), and a
+files/mongo/neo4j `Backend`, also importable as `data_refinery.store`; the files
+backend accepts an opt-in `write_gitignore=True` to write a fail-closed
+`.gitignore`, files-only, default off), and a
 **consumer-agnostic** data-quality surface (`validate`, `dedup`, `integrity`,
 `freshness`). It treats stored data as **opaque envelopes**
 (`{id, hash, content, scope, metadata}`) and never interprets them as "memories"
