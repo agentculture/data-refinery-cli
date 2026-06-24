@@ -1,0 +1,206 @@
+{
+  "slug": "data-refinery-s-files-backend-can-write-a-fail-clo",
+  "title": "data-refinery's files backend can write a fail-closed .gitignore on store-dir materialization, so a consumer keeps private shards out of git without ever constructing a write path itself",
+  "frame_slug": "data-refinery-s-files-backend-can-write-a-fail-clo",
+  "schema_version": 1,
+  "status": "exported",
+  "created": "2026-06-24T14:07:57Z",
+  "updated": "2026-06-24T14:10:17Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "data-refinery's files backend can write a fail-closed .gitignore on store-dir materialization, so a consumer keeps private shards out of git without ever constructing a write path itself"
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "a files store dir opted in to write_gitignore ends up with private shards untracked by git and public shards tracked, and the consumer supplied only a bool + a base_dir it owns (no write path)"
+    },
+    {
+      "id": "c2",
+      "kind": "audience",
+      "text": "eidetic-cli (the first consumer, moving to repo-contained memory) and the assisting agent; more generally any files-backend consumer that wants repo-contained private shards"
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "eidetic-cli is a real, named first consumer whose repo-contained-memory cutover (its 2026-06-24 spec) is blocked on this issue, and the surface is generic enough that any other files-backend consumer could opt in identically"
+    },
+    {
+      "id": "c3",
+      "kind": "after_state",
+      "text": "a files store dir is materialized with a fail-closed .gitignore that ignores everything but public shards, so private shards (<scope>__private.jsonl) are git-ignored from their first write; the consumer opts in with a single flag and never builds a write path"
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "the consumer reaches the materialized .gitignore by passing only write_gitignore=True + a base_dir it already owns; a test drives store.put/migrate and asserts the file exists without the caller building any path"
+    },
+    {
+      "id": "c4",
+      "kind": "before_state",
+      "text": "a consumer that wants private shards out of git must construct and write a .gitignore itself, reintroducing exactly the pythonsecurity:S2083 write-path sink that #8 removed by moving path-construction to DR"
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "without this endpoint the consumer's own .gitignore write is a flagged pythonsecurity:S2083 path sink (eidetic's prior BLOCKER that #8 and this issue move to DR)"
+    },
+    {
+      "id": "c5",
+      "kind": "why_it_matters",
+      "text": "DR owns the <scope>__<visibility>.jsonl on-disk layout, so DR must own the ignore pattern that tracks it; a whitelist (fail-closed) excludes any future private filename or sidecar DR introduces by default rather than silently leaking it"
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "because the whitelist allows only *__public.jsonl, an arbitrary non-public sidecar name DR might add later is git-ignored by default \u2014 verifiable with git check-ignore on a made-up sidecar filename"
+    },
+    {
+      "id": "c6",
+      "kind": "boundary",
+      "text": "files backend only (mongo/neo4j have no on-disk dir -> no-op); never write on a read (list()/get() must not create files); never clobber an existing .gitignore; default OFF so existing dirs stay byte-identical"
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "mongo/neo4j is a no-op (no .gitignore), a read get()/list() creates nothing, and an existing .gitignore is never rewritten \u2014 each is a distinct passing test"
+    },
+    {
+      "id": "c7",
+      "kind": "success_signal",
+      "text": "in an opted-in dir, git check-ignore reports <scope>__private.jsonl ignored and <scope>__public.jsonl tracked; re-materializing writes nothing (idempotent); option OFF is byte-identical to today; shipped in a tagged release eidetic can pin a floor to"
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "the acceptance trio (check-ignore private-ignored & public-tracked; idempotent re-run writes nothing; OFF is byte-identical) are all expressible as passing tests, and the change ships under a bumped version + CHANGELOG entry"
+    },
+    {
+      "id": "c8",
+      "kind": "requirement",
+      "text": "expose an opt-in write_gitignore flag (default False) on FilesBackend init, plumbed through the store surface eidetic consumes so the consumer passes only a bool and a base_dir it already owns"
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "with the flag OFF (the default), a materialized store dir is byte-for-byte identical to today: no .gitignore, no extra files, no behavior change on any existing consumer or dir"
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "when on, ensure base_dir/.gitignore holds the fail-closed whitelist exactly: a line '*', then '!.gitignore', then '!*__public.jsonl' \u2014 created only on a write/materialize, never on a read"
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "in a real git repo, git check-ignore confirms <scope>__private.jsonl is ignored AND <scope>__public.jsonl is tracked under an opted-in base_dir"
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "a read-only get()/list() (and a dry-run migrate) never creates the .gitignore; only an actual write/materialize does"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Core files-backend .gitignore support + unit/integration tests",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "FilesBackend(base_dir, write_gitignore=True) creates base_dir/.gitignore on the first upsert with exactly the bytes '*\\n!.gitignore\\n!*__public.jsonl\\n'",
+        "default write_gitignore=False writes no .gitignore; the materialized dir is byte-identical to current behavior (regression test)",
+        "get()/list() never create .gitignore even when write_gitignore=True (gitignore lives on write paths only, never in __init__)",
+        "an existing .gitignore is never overwritten even when its content differs from the whitelist (create-when-absent)",
+        "in a temp git repo: git check-ignore reports <scope>__private.jsonl and an arbitrary non-public sidecar name ignored, and <scope>__public.jsonl tracked",
+        "files.build(base_dir=..., write_gitignore=...) honors both kwargs (no longer dropped); store.put/get/list forward them through get_backend",
+        "mongo/neo4j backends remain unaffected (no .gitignore behavior); a re-run after the file exists writes nothing"
+      ],
+      "deps": [],
+      "covers": [
+        "c1",
+        "c5",
+        "c6",
+        "c8",
+        "c9",
+        "h1",
+        "h2",
+        "h3",
+        "h6",
+        "h8",
+        "h10",
+        "h11",
+        "h12"
+      ]
+    },
+    {
+      "id": "t2",
+      "summary": "Plumb write_gitignore + base_dir through store.migrate",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "store.migrate(transform, backend='files', base_dir=..., write_gitignore=True) materializes base_dir/.gitignore during the apply pass",
+        "dry_run=True writes nothing, including no .gitignore",
+        "migrate() signature gains write_gitignore: bool = False; with it off, migrate is byte-identical to today"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c3"
+      ]
+    },
+    {
+      "id": "t3",
+      "summary": "Docs + version bump + CHANGELOG for the opt-in surface",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "docs/contract.md documents write_gitignore on the files put/migrate surface: the fail-closed whitelist, create-when-absent, and the mongo/neo4j no-op",
+        "README.md + AGENTS.colleague.md note the opt-in; CHANGELOG.md gains an Added entry; pyproject.toml version is bumped so version-check passes",
+        "the rationale (DR owns the layout so DR owns the ignore pattern; moves eidetic's S2083 sink) is captured in the contract doc"
+      ],
+      "deps": [
+        "t1",
+        "t2"
+      ],
+      "covers": [
+        "c4",
+        "c7",
+        "h9",
+        "h12"
+      ]
+    },
+    {
+      "id": "t4",
+      "summary": "Cross-check eidetic-cli can reach write_gitignore via the importable surface",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "eidetic-cli's store consumption call sites are inspected and confirmed able to pass write_gitignore via store.migrate/store.put with a base_dir it owns (Option B); if not, a follow-up issue is filed naming the surface eidetic needs",
+        "the tagged-release floor eidetic will pin is identified (the version this ships in)"
+      ],
+      "deps": [],
+      "covers": [
+        "c2",
+        "h7"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "git check-ignore acceptance tests require a git binary; the test must skip gracefully when git is absent rather than fail",
+      "kind": "unknown_nonblocking",
+      "task_id": "t1"
+    },
+    {
+      "id": "r2",
+      "text": "t4 inspects sibling repo eidetic-cli, which may not be checked out locally; if absent, cross-check defers to a brief/issue on eidetic-cli rather than blocking the release",
+      "kind": "unknown_nonblocking",
+      "task_id": "t4"
+    }
+  ]
+}
