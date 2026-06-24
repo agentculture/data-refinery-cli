@@ -9,18 +9,18 @@
 ## Before → After
 
 - Before: a consumer that wants private shards out of git must construct and write a .gitignore itself, reintroducing exactly the pythonsecurity:S2083 write-path sink that #8 removed by moving path-construction to DR
-- After: a files store dir is materialized with a fail-closed .gitignore that ignores everything but public shards, so private shards (<scope>__private.jsonl) are git-ignored from their first write; the consumer opts in with a single flag and never builds a write path
+- After: a files store dir is materialized with a fail-closed .gitignore that ignores everything but public shards, so private shards (`<scope>__private.jsonl`) are git-ignored from their first write; the consumer opts in with a single flag and never builds a write path
 
 ## Why it matters
 
-- DR owns the <scope>__<visibility>.jsonl on-disk layout, so DR must own the ignore pattern that tracks it; a whitelist (fail-closed) excludes any future private filename or sidecar DR introduces by default rather than silently leaking it
+- DR owns the `<scope>__<visibility>.jsonl` on-disk layout, so DR must own the ignore pattern that tracks it; a whitelist (fail-closed) excludes any future private filename or sidecar DR introduces by default rather than silently leaking it
 
 ## Requirements
 
 - expose an opt-in write_gitignore flag (default False) on FilesBackend init, plumbed through the store surface eidetic consumes so the consumer passes only a bool and a base_dir it already owns
   - honesty: with the flag OFF (the default), a materialized store dir is byte-for-byte identical to today: no .gitignore, no extra files, no behavior change on any existing consumer or dir
 - when on, ensure base_dir/.gitignore holds the fail-closed whitelist exactly: a line '*', then '!.gitignore', then '!*__public.jsonl' — created only on a write/materialize, never on a read
-  - honesty: in a real git repo, git check-ignore confirms <scope>__private.jsonl is ignored AND <scope>__public.jsonl is tracked under an opted-in base_dir
+  - honesty: in a real git repo, git check-ignore confirms `<scope>__private.jsonl` is ignored AND `<scope>__public.jsonl` is tracked under an opted-in base_dir
   - honesty: a read-only get()/list() (and a dry-run migrate) never creates the .gitignore; only an actual write/materialize does
 
 ## Honesty conditions
@@ -37,7 +37,7 @@
 
 ## Success signals
 
-- in an opted-in dir, git check-ignore reports <scope>__private.jsonl ignored and <scope>__public.jsonl tracked; re-materializing writes nothing (idempotent); option OFF is byte-identical to today; shipped in a tagged release eidetic can pin a floor to
+- in an opted-in dir, git check-ignore reports `<scope>__private.jsonl` ignored and `<scope>__public.jsonl` tracked; re-materializing writes nothing (idempotent); option OFF is byte-identical to today; shipped in a tagged release eidetic can pin a floor to
 
 ## Scope / boundaries
 

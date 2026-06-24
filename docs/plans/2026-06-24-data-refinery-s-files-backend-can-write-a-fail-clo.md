@@ -14,7 +14,7 @@ slug: `data-refinery-s-files-backend-can-write-a-fail-clo` · status: `exported`
   - default write_gitignore=False writes no .gitignore; the materialized dir is byte-identical to current behavior (regression test)
   - get()/list() never create .gitignore even when write_gitignore=True (gitignore lives on write paths only, never in __init__)
   - an existing .gitignore is never overwritten even when its content differs from the whitelist (create-when-absent)
-  - in a temp git repo: git check-ignore reports <scope>__private.jsonl and an arbitrary non-public sidecar name ignored, and <scope>__public.jsonl tracked
+  - in a temp git repo: git check-ignore reports `<scope>__private.jsonl` and an arbitrary non-public sidecar name ignored, and `<scope>__public.jsonl` tracked
   - files.build(base_dir=..., write_gitignore=...) honors both kwargs (no longer dropped); store.put/get/list forward them through get_backend
   - mongo/neo4j backends remain unaffected (no .gitignore behavior); a re-run after the file exists writes nothing
 
