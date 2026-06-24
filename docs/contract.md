@@ -150,7 +150,7 @@ summary = migrate(record_to_envelope, base_dir="/path/to/store")  # -> dict
 # record_to_envelope: Callable[[dict], Envelope | None]  (None drops a record)
 ```
 
-`migrate(transform=None, *, backend="files", base_dir=None, dry_run=False)`
+`migrate(transform=None, *, backend="files", base_dir=None, write_gitignore=False, dry_run=False)`
 returns `{backend, files, migrated, migrated_files, skipped, dry_run}`. With
 `transform=None` it re-canonicalises data-refinery's own Envelope-JSONL (the
 self-heal path the `store migrate` CLI verb uses). The consumer supplies a
@@ -170,6 +170,42 @@ write path.
   and leaves the original file untouched. Never a traceback.
 - **Files granularity only** today — `mongo` (vectors) / `neo4j` (graph)
   migration are a later granularity and exit `1` with a `hint:`.
+
+### Fail-closed `.gitignore` opt-in (stable)
+
+When a consumer opts in with `write_gitignore=True`, the files backend ensures a
+fail-closed `.gitignore` exists in the store `base_dir` with exactly this
+content:
+
+```gitignore
+*
+!.gitignore
+!*__public.jsonl
+```
+
+It ignores everything and only ever allows public shards (and the `.gitignore`
+itself) to be tracked, so any future private filename or sidecar is excluded by
+default.
+
+**Behavior:**
+
+- **Opt-in** — default `False`; off is byte-identical to today.
+- **Materialise on write, never on read** — written only during an upsert or a
+  non-dry `store migrate` apply; never on `get`/`list` or a dry-run.
+- **Create-when-absent only** — an existing `.gitignore` is never overwritten.
+- **Files backend only** — `mongo`/`neo4j` are a no-op.
+
+**Reachable surfaces:**
+
+- `FilesBackend(base_dir, write_gitignore=True)`
+- `data_refinery.store.put/get/list(..., backend="files", base_dir=..., write_gitignore=True)`
+  (`get_backend` forwards kwargs to the files `build()`)
+- `data_refinery.store.migrate(transform, *, backend="files", base_dir=..., write_gitignore=..., dry_run=...)`
+
+**Rationale:** data-refinery owns the `<scope>__<visibility>.jsonl` on-disk
+layout, so it owns the ignore pattern that tracks it; this keeps the `.gitignore`
+write-path sink (the consumer's prior pythonsecurity:S2083) on the storage
+owner. Continues issues #8 / #1.
 
 ## Versioning policy
 
