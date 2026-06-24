@@ -20,6 +20,10 @@ from data_refinery.store.envelope import Envelope, Scope, Visibility, can_serve
 _ENV_DIR = "DR_DATA_DIR"
 _JSONL_GLOB = "*.jsonl"  # one scope file per (name, visibility)
 _TMP_SUFFIX = ".tmp"  # atomic-write temp sibling: "<scope>.jsonl.tmp"
+_GITIGNORE_NAME = ".gitignore"
+# Fail-closed whitelist (issue #12): ignore everything but public shards, so any
+# future private filename or sidecar is excluded by default rather than leaked.
+_GITIGNORE_BODY = "*\n!.gitignore\n!*__public.jsonl\n"
 # Re-derived from the public `Visibility` type so it never drifts from it.
 _VISIBILITIES: tuple[str, ...] = get_args(Visibility)
 
@@ -32,16 +36,34 @@ Transform = Callable[[dict[str, Any]], Envelope | None]
 class FilesBackend:
     """Persist envelopes as JSONL files, one file per scope."""
 
-    def __init__(self, base_dir: str | None = None) -> None:
+    def __init__(self, base_dir: str | None = None, *, write_gitignore: bool = False) -> None:
         if base_dir is None:
             base_dir = os.environ.get(_ENV_DIR) or str(Path.home() / ".data-refinery" / "store")
         self._base = Path(base_dir)
         self._base.mkdir(parents=True, exist_ok=True)
+        self._write_gitignore = write_gitignore
 
     # -- Backend protocol -----------------------------------------------
 
+    def _ensure_gitignore(self) -> None:
+        """Create ``.gitignore`` in *base_dir* when ``write_gitignore`` is set.
+
+        Create-when-absent only (never overwrites user edits). Reuses the shared
+        :meth:`_atomic_write` (temp sibling + ``os.replace``), so a write fault
+        surfaces as a structured ``CliError`` — never a traceback — and a crash
+        leaves either no file or the complete whitelist (the orphan temp is
+        reaped by :meth:`_reap_orphan_tmp`).
+        """
+        if not self._write_gitignore:
+            return
+        gi = self._base / _GITIGNORE_NAME
+        if gi.exists():
+            return
+        self._atomic_write(gi, _GITIGNORE_BODY)
+
     def upsert(self, envelope: Envelope) -> None:
         """Insert or replace *envelope* idempotently (by id; dedup by hash on insert)."""
+        self._ensure_gitignore()
         path = self._scope_file(envelope.scope)
         records = self._load(path)
 
@@ -141,6 +163,7 @@ class FilesBackend:
         # per file (temp sibling + os.replace), so a crash here still leaves each
         # file either fully old or fully new and the run is safe to resume.
         if not dry_run:
+            self._ensure_gitignore()
             for path, new_text in plan:
                 self._atomic_write(path, new_text)
         return {
@@ -215,13 +238,19 @@ class FilesBackend:
 
     @staticmethod
     def _reap_orphan_tmp(root: Path) -> None:
-        """Remove ``*.jsonl.tmp`` left by a prior interrupted rewrite.
+        """Remove ``*.jsonl.tmp`` / ``.gitignore.tmp`` left by an interrupted write.
 
         ``os.replace`` consumes the temp on success, so a surviving temp is the
         residue of a crash *before* the swap — the real file is intact. Reaping
-        keeps the store dir tidy and the ``*.jsonl`` glob unambiguous.
+        keeps the store dir tidy and the ``*.jsonl`` glob unambiguous. The
+        ``.gitignore`` temp shares the same atomic-write path, so it is reaped
+        here too (it falls outside the ``*.jsonl.tmp`` glob).
         """
-        for tmp in root.glob(_JSONL_GLOB + _TMP_SUFFIX):
+        temps = list(root.glob(_JSONL_GLOB + _TMP_SUFFIX))
+        gi_tmp = root / (_GITIGNORE_NAME + _TMP_SUFFIX)
+        if gi_tmp.exists():
+            temps.append(gi_tmp)
+        for tmp in temps:
             try:
                 tmp.unlink()
             except OSError:  # pragma: no cover - best effort
@@ -345,6 +374,8 @@ def _to_envelope(obj: dict[str, Any], transform: Transform | None) -> Envelope |
     return transform(obj)
 
 
-def build(**_kwargs: object) -> Backend:
-    """Factory: a default FilesBackend (ignores kwargs like ``timeout_ms``)."""
-    return FilesBackend()
+def build(
+    *, base_dir: str | None = None, write_gitignore: bool = False, **_kwargs: object
+) -> Backend:
+    """Factory: a FilesBackend honouring ``base_dir`` and ``write_gitignore``."""
+    return FilesBackend(base_dir, write_gitignore=write_gitignore)

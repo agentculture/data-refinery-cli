@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-06-24
+
+### Added
+
+- Files store backend: optional `write_gitignore` flag (default off) that writes a fail-closed `.gitignore` (`*` / `!.gitignore` / `!*__public.jsonl`) into the store `base_dir` on materialization, so a consumer keeps private shards out of git without ever constructing a filesystem write path (issue #12). Reachable via `FilesBackend(base_dir, write_gitignore=True)`, `store.put/get/list(..., backend="files", base_dir=..., write_gitignore=True)`, and `store.migrate(..., write_gitignore=True)`. Written only on a write/materialize (never on a read or a dry-run migrate), create-when-absent (never clobbers an existing `.gitignore`), files backend only (mongo/neo4j are a no-op).
+
+### Changed
+
+- `data_refinery.store.backends.files.build()` now honors `base_dir` and `write_gitignore` kwargs (it previously dropped all kwargs), so the importable `store.put`/`get`/`list` surface can target a caller-owned `base_dir`.
+
 ## [0.8.0] - 2026-06-24
 
 ### Added

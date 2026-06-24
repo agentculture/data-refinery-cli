@@ -62,6 +62,10 @@ store.list()          # -> list[Envelope]
 # Upgrade a populated legacy store to the current Envelope format — the consumer
 # supplies only a transform, never a filesystem write path (data-refinery owns it):
 store.migrate(record_to_envelope, base_dir="/path/to/store")
+
+# Opt-in: write a fail-closed .gitignore so private shards stay out of git
+# (files backend only; default off, byte-identical when omitted):
+store.put(env, backend="files", base_dir="/path/to/store", write_gitignore=True)
 ```
 
 ## CLI
